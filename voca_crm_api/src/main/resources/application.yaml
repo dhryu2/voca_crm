@@ -1,0 +1,219 @@
+spring:
+  application:
+    # 애플리케이션 이름 (환경변수에서 가져옴)
+    name: ${APP_NAME:voca_crm_api}
+
+  datasource:
+    # PostgreSQL 데이터베이스 연결 설정
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:voca_crm}
+    driver-class-name: org.postgresql.Driver
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+
+    # HikariCP 커넥션 풀 설정 (성능 최적화)
+    hikari:
+      maximum-pool-size: 10              # 최대 커넥션 수
+      minimum-idle: 5                    # 최소 유휴 커넥션 수
+      connection-timeout: 30000          # 커넥션 타임아웃 (30초)
+      idle-timeout: 600000               # 유휴 커넥션 유지 시간 (10분)
+      max-lifetime: 1800000              # 커넥션 최대 수명 (30분)
+
+  jpa:
+    hibernate:
+      # DDL 자동 생성 옵션
+      # validate: 엔티티와 테이블이 정상 매핑되는지만 확인 (운영 환경 권장)
+      # Flyway가 스키마를 관리하므로 validate 사용
+      ddl-auto: validate
+    # SQL 쿼리 콘솔 출력 비활성화 (보안: 민감 데이터 노출 방지)
+    show-sql: false
+    properties:
+      hibernate:
+        # SQL 쿼리 포맷팅 비활성화 (운영 환경)
+        format_sql: false
+        # PostgreSQL 방언 (자동 감지되므로 생략 가능하지만 명시적으로 설정)
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        # SQL 주석 비활성화 (보안)
+        use_sql_comments: false
+        # JDBC 배치 사이즈 (성능 최적화)
+        jdbc:
+          batch_size: 20
+        # 2차 캐시 사용 안 함 (필요시 활성화)
+        cache:
+          use_second_level_cache: false
+
+  # Jackson JSON 직렬화/역직렬화 설정
+  jackson:
+    # camelCase 사용 (JSON API 표준, Flutter와 호환)
+    # property-naming-strategy를 설정하지 않으면 기본값인 camelCase 사용
+    # null 값 제외하지 않음 (명시적 null 전달)
+    default-property-inclusion: always
+    # 날짜 형식 설정
+    date-format: yyyy-MM-dd'T'HH:mm:ss
+    time-zone: Asia/Seoul
+
+  flyway:
+    # Flyway 활성화 여부 (true: 자동 마이그레이션 실행)
+    enabled: true
+
+    # 기존 DB에 Flyway를 처음 적용할 때 사용
+    # 이미 테이블이 있어도 baseline 버전으로 기록하고 이후 마이그레이션만 실행
+    # 첫 설정 후에는 false로 변경 권장
+    baseline-on-migrate: false
+
+    # 마이그레이션 실행 전 파일 체크섬 검증
+    # true: 이미 실행된 SQL 파일이 수정되면 에러 발생 (운영 환경 권장)
+    # false: 검증 안 함 (개발 환경에서만 사용)
+    validate-on-migrate: true
+
+    # SQL 파일 위치 (클래스패스 기준)
+    locations: classpath:db/migration
+
+    # SQL 파일 인코딩
+    encoding: UTF-8
+
+    # Flyway clean 명령 비활성화 (모든 테이블 삭제 방지)
+    # 운영 환경에서는 반드시 true로 설정!
+    clean-disabled: true
+
+    # 마이그레이션 파일 실행 순서 허용
+    # false: V1 → V2 → V3 순서대로만 실행 (권장)
+    # true: 순서 무관하게 실행 (위험, 사용 비권장)
+    out-of-order: false
+
+    # placeholder 사용 여부
+    # ${placeholderName} 형태로 SQL에서 변수 사용 가능
+    placeholder-replacement: true
+
+    # SQL 실행 전 테이블 존재 여부 확인
+    # true: 실행 전 체크 (안전)
+    validate-migration-naming: true
+
+  # Redis 설정
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 60000                   # 연결 타임아웃 (60초)
+      lettuce:
+        pool:
+          max-active: 10               # 최대 활성 연결 수
+          max-idle: 8                  # 최대 유휴 연결 수
+          min-idle: 2                  # 최소 유휴 연결 수
+          max-wait: -1                 # 연결 대기 시간 (-1: 무제한)
+
+  # Spring Session 설정 (Redis 기반)
+  session:
+    store-type: redis                  # 세션 저장소로 Redis 사용
+    timeout: 1800                      # 세션 타임아웃 (30분, 초 단위)
+    redis:
+      namespace: spring:session        # Redis 키 네임스페이스
+      flush-mode: on_save              # 세션 저장 시점 (on_save: 명시적 저장 시)
+
+server:
+  # 서버 포트
+  port: ${SERVER_PORT:8080}
+
+  # 에러 처리 설정
+  error:
+    include-message: always            # 에러 메시지 항상 포함
+    include-stacktrace: never          # 스택트레이스 절대 노출 안 함 (보안)
+
+  # 톰캣 설정
+  tomcat:
+    threads:
+      max: 200                         # 최대 쓰레드 수
+      min-spare: 10                    # 최소 유휴 쓰레드 수
+    max-connections: 8192              # 최대 동시 연결 수
+
+# 로깅 설정
+logging:
+  level:
+    root: INFO                         # 전체 로그 레벨
+    com.vocacrm: DEBUG                 # 내 애플리케이션 로그
+    # SQL 로깅 비활성화 (보안: 민감 데이터 노출 방지)
+    org.hibernate.SQL: OFF             # SQL 쿼리 로그 비활성화
+    org.hibernate.type.descriptor.sql.BasicBinder: OFF  # SQL 파라미터 로그 비활성화
+    org.flywaydb: INFO                 # Flyway 로그 (개발: DEBUG, 운영: INFO)
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# CORS 설정 (WebConfig.java에서 설정)
+# 참고: 모바일 앱 전용 API이므로 CORS는 개발/테스트 환경에서만 사용됨
+# 모바일 앱은 CORS 규칙을 따르지 않음 (브라우저 전용 보안 메커니즘)
+cors:
+  allowed-origins: "http://localhost:3000,http://localhost:8080"  # 개발 환경만 허용
+
+# JWT 설정
+jwt:
+  # JWT 토큰 서명용 시크릿 키 (환경변수 필수)
+  # 로컬 개발: .env 파일 또는 IDE 환경변수 설정
+  # Docker: docker-compose.yml의 environment에서 주입
+  secret: ${JWT_SECRET}
+  access-token-validity: 3600000       # 1시간 (밀리초)
+  refresh-token-validity: 1209600000   # 14일 (밀리초) - JwtUtil에서 사용
+  # Refresh Token 설정 (Redis 기반 Rotation + Sliding)
+  refresh-token-inactivity-expiry: 1209600    # 비활성 만료: 14일 (초) - 마지막 사용 후 14일
+  refresh-token-absolute-expiry: 7776000      # 절대 만료: 90일 (초) - 생성 후 90일
+  max-refresh-tokens-per-user: 2              # 사용자당 최대 토큰 수 (디바이스 제한)
+
+# Rate Limiting 설정
+rate-limit:
+  enabled: true                        # Rate Limiting 활성화 (운영: true)
+  auth:                                # 인증 관련 엔드포인트 (로그인, 회원가입, 토큰 갱신)
+    requests: 10                       # 분당 10회 (브루트포스 방지)
+    period-seconds: 60
+  api:                                 # 일반 API 엔드포인트
+    requests: 300                      # 분당 300회
+    period-seconds: 60
+  search:                              # 검색 API 엔드포인트
+    requests: 100                      # 분당 100회
+    period-seconds: 60
+  voice-ai:                            # 음성 명령 AI 분석 (/api/voice/command)
+    requests: 5                        # 분당 5회 (DeepL + AI 사용, 보수적 제한)
+    period-seconds: 60
+  voice:                               # 음성 명령 기타 (/api/voice/continue 등)
+    requests: 30                       # 분당 30회 (AI 분석 없음)
+    period-seconds: 60
+
+# AI 서버 설정 (Ollama)
+ai:
+  server:
+    url: ${AI_SERVER_URL:http://localhost:11434}
+    model: ${AI_MODEL_NAME:llama-3.2-Korean-Bllossom-3B}
+    timeout: 30000                     # AI 서버 응답 타임아웃 (30초)
+  daily-limit:
+    enabled: true                      # 일일 제한 활성화
+    max-requests: 500                  # 일일 최대 AI 분석 요청 수
+                                       # DeepL 월 50만자 / 30일 / 평균 25자 ≈ 666회
+                                       # 안전 마진 고려하여 500회로 설정
+
+# DeepL 번역 API 설정
+# https://www.deepl.com/en/translator
+deepl:
+  api-key: ${DEEPL_API_KEY:}
+  api-url: ${DEEPL_API_URL:https://api-free.deepl.com/v2/translate}  # 무료: api-free, 유료: api
+  timeout: 10000                       # DeepL API 응답 타임아웃 (10초)
+
+# 시스템 관리자 설정
+app:
+  system-admin-ids: ${SYSTEM_ADMIN_IDS:admin}
+
+# Actuator 엔드포인트 보안 설정
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health                # health 엔드포인트만 노출 (운영 환경)
+        # 개발 환경에서 추가 필요 시: health,info,metrics
+      base-path: /actuator             # 기본 경로 유지
+    enabled-by-default: false          # 모든 엔드포인트 기본 비활성화
+  endpoint:
+    health:
+      enabled: true                    # health 엔드포인트만 활성화
+      show-details: never              # 상세 정보 노출 안 함 (보안)
+      show-components: never           # 컴포넌트 정보 노출 안 함
+  # Actuator 보안: 민감한 정보 노출 방지
+  info:
+    env:
+      enabled: false                   # 환경변수 노출 방지
