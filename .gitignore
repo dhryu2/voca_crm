@@ -1,0 +1,30 @@
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+voca_crm_api/src/main/resources/service-account.json
+voca_crm/ios/Flutter/Secrets.xcconfig
+voca_crm_api/DEPLOYMENT.md
+
+# Firebase CLI config
+voca_crm/firebase.json
+
+# Claude Code local settings
+.claude/settings.local.json
+*/.claude/settings.local.json
