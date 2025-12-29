@@ -1,0 +1,58 @@
+HELP.md
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### Environment Variables ###
+.env
+.env.local
+.env.*.local
+
+### Firebase & OAuth ###
+src/main/resources/service-account.json
+**/service-account*.json
+
+### Spring Boot Configuration ###
+application-local.yaml
+application-local.yml
+application-local.properties
+application-dev.yaml
+application-dev.yml
+application-dev.properties
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
+
+### Logs ###
+*.log
+logs/
