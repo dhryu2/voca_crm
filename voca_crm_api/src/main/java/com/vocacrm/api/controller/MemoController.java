@@ -93,6 +93,42 @@ public class MemoController {
     }
 
     /**
+     * 사업장별 메모 목록 조회 (최신순)
+     *
+     * HTTP Method: GET
+     * URL: /api/memos/by-business-place/{businessPlaceId}
+     *
+     * Path Variable:
+     * - businessPlaceId: 사업장 ID
+     *
+     * Required Headers:
+     * - Authorization: Bearer {JWT token}
+     *
+     * 권한 검증: 사용자가 해당 사업장에 접근 권한이 있는지 확인
+     *
+     * @param businessPlaceId 조회할 사업장 ID
+     * @param servletRequest HttpServletRequest (JWT에서 추출한 정보 포함)
+     * @return 해당 사업장의 전체 메모 목록 (최신순, HTTP 200 OK)
+     */
+    @GetMapping("/by-business-place/{businessPlaceId}")
+    public ResponseEntity<List<Memo>> getMemosByBusinessPlace(
+            @PathVariable String businessPlaceId,
+            jakarta.servlet.http.HttpServletRequest servletRequest) {
+        String userId = (String) servletRequest.getAttribute("userId");
+
+        boolean hasAccess = userBusinessPlaceRepository
+                .existsByUserIdAndBusinessPlaceIdAndStatus(
+                        UUID.fromString(userId), businessPlaceId, AccessStatus.APPROVED);
+
+        if (!hasAccess) {
+            throw new RuntimeException("해당 사업장의 메모에 대한 접근 권한이 없습니다.");
+        }
+
+        List<Memo> memos = memoService.getMemosByBusinessPlace(businessPlaceId);
+        return ResponseEntity.ok(memos);
+    }
+
+    /**
      * 특정 회원의 전체 메모 목록 조회 (최신순)
      *
      * HTTP Method: GET

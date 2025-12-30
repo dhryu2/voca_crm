@@ -61,6 +61,32 @@ public class UserController {
         return ResponseEntity.ok(updated);
     }
 
+    /**
+     * 현재 로그인한 사용자 정보 수정 (PUT /users/me)
+     * JWT에서 userId를 추출하여 본인 정보 수정
+     */
+    @PutMapping("/me")
+    public ResponseEntity<User> updateCurrentUser(@Valid @RequestBody UserUpdateRequest request, HttpServletRequest servletRequest) {
+        String userId = (String) servletRequest.getAttribute("userId");
+
+        User user = userRepository.findById(UUID.fromString(userId))
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // 사용자가 변경할 수 있는 필드만 업데이트
+        if (request.getUsername() != null && !request.getUsername().isEmpty()) {
+            user.setUsername(request.getUsername());
+        }
+        if (request.getEmail() != null && !request.getEmail().isEmpty()) {
+            user.setEmail(request.getEmail());
+        }
+        if (request.getPhone() != null) {
+            user.setPhone(request.getPhone());
+        }
+
+        User updated = userRepository.save(user);
+        return ResponseEntity.ok(updated);
+    }
+
     @PutMapping("/{id}/default-business-place")
     public ResponseEntity<User> updateDefaultBusinessPlace(
             @PathVariable String id,
