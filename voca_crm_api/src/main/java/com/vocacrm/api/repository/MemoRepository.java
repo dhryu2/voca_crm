@@ -199,6 +199,21 @@ public interface MemoRepository extends JpaRepository<Memo, UUID> {
            "ORDER BY m.deletedAt DESC")
     List<Memo> findDeletedMemosByBusinessPlaceId(@Param("businessPlaceId") String businessPlaceId);
 
+    /**
+     * 특정 사업장의 삭제되지 않은 모든 메모 목록 조회 (최근 수정순)
+     *
+     * @param businessPlaceId 사업장 ID
+     * @return 해당 사업장의 전체 메모 목록 (최근 수정순)
+     */
+    @Query(value = "SELECT m.* FROM memos m " +
+           "JOIN members mem ON m.member_id = mem.id " +
+           "WHERE mem.business_place_id = :businessPlaceId " +
+           "AND m.is_deleted = false " +
+           "AND mem.is_deleted = false " +
+           "ORDER BY COALESCE(m.updated_at, m.created_at) DESC", nativeQuery = true)
+    List<Memo> findByBusinessPlaceIdAndIsDeletedFalseOrderByCreatedAtDesc(
+            @Param("businessPlaceId") String businessPlaceId);
+
     // ===== 기존 메서드들 (내부용, Service에서 권한 체크 후 사용) =====
 
     /**
