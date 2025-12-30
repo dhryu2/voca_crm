@@ -64,6 +64,19 @@ public class MemoService {
     }
 
     /**
+     * 사업장별 메모 목록 조회 (삭제되지 않은 메모만)
+     * 컨트롤러에서 권한 검증을 먼저 수행해야 합니다.
+     * @param businessPlaceId 사업장 ID
+     * @return 해당 사업장의 전체 메모 목록 (최근 수정순)
+     */
+    public List<Memo> getMemosByBusinessPlace(String businessPlaceId) {
+        if (businessPlaceId == null || businessPlaceId.isEmpty()) {
+            throw new IllegalArgumentException("businessPlaceId는 필수입니다");
+        }
+        return memoRepository.findByBusinessPlaceIdAndIsDeletedFalseOrderByCreatedAtDesc(businessPlaceId);
+    }
+
+    /**
      * 회원별 메모 목록 조회 (삭제되지 않은 메모만, 사업장 권한 검증 포함)
      * @param memberId 회원 ID
      * @param businessPlaceId 사업장 ID (권한 검증용)
