@@ -54,10 +54,17 @@ class _DeletedMembersScreenState extends State<DeletedMembersScreen> {
         _deletedMembers = members;
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
       setState(() => _isLoading = false);
       if (mounted) {
-        AppMessageHandler.handleApiError(context, e);
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'DeletedMembersScreen',
+          action: '삭제된 고객 목록 조회',
+          userId: widget.user.id,
+        );
       }
     }
   }
@@ -191,10 +198,17 @@ class _DeletedMembersScreenState extends State<DeletedMembersScreen> {
                               );
                               _loadDeletedMembers();
                             }
-                          } catch (e) {
+                          } catch (e, stackTrace) {
                             if (context.mounted) {
                               Navigator.pop(context);
-                              AppMessageHandler.handleApiError(context, e);
+                              await AppMessageHandler.handleErrorWithLogging(
+                                context,
+                                e,
+                                stackTrace,
+                                screenName: 'DeletedMembersScreen',
+                                action: '고객 복원',
+                                userId: widget.user.id,
+                              );
                             }
                           }
                         },
@@ -335,10 +349,17 @@ class _DeletedMembersScreenState extends State<DeletedMembersScreen> {
                               );
                               _loadDeletedMembers();
                             }
-                          } catch (e) {
+                          } catch (e, stackTrace) {
                             if (context.mounted) {
                               Navigator.pop(context);
-                              AppMessageHandler.handleApiError(context, e);
+                              await AppMessageHandler.handleErrorWithLogging(
+                                context,
+                                e,
+                                stackTrace,
+                                screenName: 'DeletedMembersScreen',
+                                action: '고객 영구 삭제',
+                                userId: widget.user.id,
+                              );
                             }
                           }
                         },

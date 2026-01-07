@@ -6,6 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:voca_crm/core/theme/theme_color.dart';
+import 'package:voca_crm/core/utils/message_handler.dart';
 import 'package:voca_crm/data/datasource/memo_service.dart';
 import 'package:voca_crm/data/datasource/voice_command_service.dart';
 import 'package:voca_crm/data/repository/memo_repository_impl.dart';
@@ -450,7 +451,18 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
       } else if (response.isError) {
         await _speak(response.message);
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      if (mounted) {
+        final userViewModel = context.read<UserViewModel>();
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'VoiceCommandScreen',
+          action: '명령 실행',
+          userId: userViewModel.user?.id,
+        );
+      }
       await _speak('명령 처리 중 오류가 발생했습니다. 다시 시도해주세요.');
     }
   }
@@ -669,7 +681,18 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
       } else if (response.isError) {
         await _speak(response.message);
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      if (mounted) {
+        final userViewModel = context.read<UserViewModel>();
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'VoiceCommandScreen',
+          action: '명령 실행',
+          userId: userViewModel.user?.id,
+        );
+      }
       await _speak('선택 처리 중 오류가 발생했습니다.');
     }
   }
@@ -699,7 +722,18 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
       } else if (response.isError) {
         await _speak(response.message);
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      if (mounted) {
+        final userViewModel = context.read<UserViewModel>();
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'VoiceCommandScreen',
+          action: '명령 실행',
+          userId: userViewModel.user?.id,
+        );
+      }
       await _speak('확인 처리 중 오류가 발생했습니다.');
       setState(() => _isConfirmationStep = false);
     }

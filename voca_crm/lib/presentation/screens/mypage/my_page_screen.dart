@@ -389,10 +389,17 @@ class _MyPageScreenState extends State<MyPageScreen> {
           value ? '알림이 활성화되었습니다' : '알림이 비활성화되었습니다',
         );
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       setState(() => _isUpdatingPushSetting = false);
       if (mounted) {
-        AppMessageHandler.handleApiError(context, e);
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'MyPageScreen',
+          action: '알림 설정 변경',
+          userId: widget.user.id,
+        );
       }
     }
   }
@@ -575,9 +582,16 @@ class _MyPageScreenState extends State<MyPageScreen> {
                                   '프로필이 업데이트되었습니다',
                                 );
                               }
-                            } catch (e) {
+                            } catch (e, stackTrace) {
                               if (context.mounted) {
-                                AppMessageHandler.handleApiError(context, e);
+                                await AppMessageHandler.handleErrorWithLogging(
+                                  context,
+                                  e,
+                                  stackTrace,
+                                  screenName: 'MyPageScreen',
+                                  action: '프로필 수정',
+                                  userId: currentUser.id,
+                                );
                               }
                             }
                           },
@@ -769,9 +783,16 @@ class _MyPageScreenState extends State<MyPageScreen> {
           );
           AppMessageHandler.showSuccessSnackBar(context, '회원 탈퇴가 완료되었습니다');
         }
-      } catch (e) {
+      } catch (e, stackTrace) {
         if (mounted) {
-          AppMessageHandler.handleApiError(context, e);
+          await AppMessageHandler.handleErrorWithLogging(
+            context,
+            e,
+            stackTrace,
+            screenName: 'MyPageScreen',
+            action: '회원 탈퇴',
+            userId: widget.user.id,
+          );
         }
       }
     }

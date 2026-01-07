@@ -14,9 +14,9 @@ class NoticeService {
   /// 사용자가 볼 수 있는 활성 공지사항 조회
   Future<List<Notice>> getActiveNotices(String userId) async {
     try {
+      // userId는 JWT 토큰에서 추출되므로 query param으로 전송하지 않음
       final response = await _apiClient.get(
         '/api/notices/active',
-        queryParams: {'userId': userId},
       );
 
       if (response.statusCode == 200) {

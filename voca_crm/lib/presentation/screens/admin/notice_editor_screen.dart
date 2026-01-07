@@ -151,11 +151,14 @@ class _NoticeEditorScreenState extends State<NoticeEditorScreen> {
       if (mounted) {
         Navigator.pop(context, true);
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (mounted) {
-        AppMessageHandler.showErrorSnackBar(
+        await AppMessageHandler.handleErrorWithLogging(
           context,
-          widget.notice != null ? '공지사항 수정 중 오류가 발생했습니다' : '공지사항 등록 중 오류가 발생했습니다',
+          e,
+          stackTrace,
+          screenName: 'NoticeEditorScreen',
+          action: widget.notice != null ? '공지사항 수정' : '공지사항 저장',
         );
       }
     } finally {

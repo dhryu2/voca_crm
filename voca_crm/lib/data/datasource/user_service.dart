@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:voca_crm/core/network/api_client.dart';
+import 'package:voca_crm/core/error/exception_parser.dart';
 import 'package:voca_crm/domain/entity/user.dart';
 
 class UserService {
@@ -9,30 +10,13 @@ class UserService {
   UserService({ApiClient? apiClient})
       : _apiClient = apiClient ?? ApiClient.instance;
 
-  /// API 응답에서 사용자 친화적 오류 메시지 추출
-  String _extractErrorMessage(String responseBody, String fallbackMessage) {
-    try {
-      final data = jsonDecode(responseBody);
-      if (data is Map<String, dynamic>) {
-        if (data['fieldErrors'] is Map && (data['fieldErrors'] as Map).isNotEmpty) {
-          final fieldErrors = data['fieldErrors'] as Map;
-          return fieldErrors.values.first.toString();
-        }
-        if (data['message'] != null && data['message'].toString().isNotEmpty) {
-          return data['message'].toString();
-        }
-      }
-    } catch (_) {}
-    return fallbackMessage;
-  }
-
   Future<User> getUser(String userId) async {
     final response = await _apiClient.get('/api/users/$userId');
 
     if (response.statusCode == 200) {
       return User.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(_extractErrorMessage(response.body, '사용자 정보를 불러오는데 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -54,7 +38,7 @@ class UserService {
     if (response.statusCode == 200) {
       return User.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(_extractErrorMessage(response.body, '사용자 정보 수정에 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -70,7 +54,7 @@ class UserService {
     if (response.statusCode == 200) {
       return User.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(_extractErrorMessage(response.body, '기본 사업장 설정에 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -78,7 +62,7 @@ class UserService {
     final response = await _apiClient.delete('/api/users/$userId');
 
     if (response.statusCode != 204 && response.statusCode != 200) {
-      throw Exception(_extractErrorMessage(response.body, '사용자 삭제에 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -94,7 +78,7 @@ class UserService {
     if (response.statusCode == 200) {
       return User.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(_extractErrorMessage(response.body, '푸시 알림 설정 변경에 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -111,7 +95,7 @@ class UserService {
     if (response.statusCode == 200) {
       return User.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(_extractErrorMessage(response.body, 'FCM 토큰 업데이트에 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 }

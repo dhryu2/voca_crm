@@ -46,10 +46,18 @@ class _BusinessPlaceMembersScreenState
         _members = members;
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
       setState(() => _isLoading = false);
       if (mounted) {
-        AppMessageHandler.handleApiError(context, e);
+        // Note: This screen doesn't have direct access to user.id, so we pass null
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'BusinessPlaceMembersScreen',
+          action: '멤버 목록 조회',
+          userId: null,
+        );
       }
     }
   }
@@ -388,9 +396,16 @@ class _BusinessPlaceMembersScreenState
         if (mounted) {
           AppMessageHandler.showSuccessSnackBar(context, '역할이 변경되었습니다');
         }
-      } catch (e) {
+      } catch (e, stackTrace) {
         if (mounted) {
-          AppMessageHandler.handleApiError(context, e);
+          await AppMessageHandler.handleErrorWithLogging(
+            context,
+            e,
+            stackTrace,
+            screenName: 'BusinessPlaceMembersScreen',
+            action: '멤버 역할 변경',
+            userId: null,
+          );
         }
       }
     }
@@ -640,9 +655,16 @@ class _BusinessPlaceMembersScreenState
         if (mounted) {
           AppMessageHandler.showSuccessSnackBar(context, '멤버가 삭제되었습니다');
         }
-      } catch (e) {
+      } catch (e, stackTrace) {
         if (mounted) {
-          AppMessageHandler.handleApiError(context, e);
+          await AppMessageHandler.handleErrorWithLogging(
+            context,
+            e,
+            stackTrace,
+            screenName: 'BusinessPlaceMembersScreen',
+            action: '멤버 강제 탈퇴',
+            userId: null,
+          );
         }
       }
     }

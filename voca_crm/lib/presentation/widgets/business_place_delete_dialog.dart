@@ -72,7 +72,16 @@ class _BusinessPlaceDeleteDialogState extends State<BusinessPlaceDeleteDialog> {
         _currentStep = 2;
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
+      // 예기치 못한 오류인 경우 로깅
+      await AppMessageHandler.handleErrorWithLogging(
+        context,
+        e,
+        stackTrace,
+        screenName: 'BusinessPlaceDeleteDialog',
+        action: '삭제 미리보기 조회',
+        businessPlaceId: widget.businessPlace.id,
+      );
       setState(() {
         _error = AppMessageHandler.parseErrorMessage(e);
         _isLoading = false;
@@ -102,12 +111,16 @@ class _BusinessPlaceDeleteDialogState extends State<BusinessPlaceDeleteDialog> {
           widget.onDeleted();
         });
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       setState(() => _isLoading = false);
       if (mounted) {
-        AppMessageHandler.showErrorSnackBar(
+        await AppMessageHandler.handleErrorWithLogging(
           context,
-          AppMessageHandler.parseErrorMessage(e),
+          e,
+          stackTrace,
+          screenName: 'BusinessPlaceDeleteDialog',
+          action: '사업장 삭제',
+          businessPlaceId: widget.businessPlace.id,
         );
       }
     }

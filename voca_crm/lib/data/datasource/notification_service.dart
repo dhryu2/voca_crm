@@ -65,9 +65,9 @@ class NotificationService {
 
   /// 모든 토큰 비활성화 (모든 기기 로그아웃)
   Future<void> deactivateAllTokens(String userId) async {
+    // userId는 JWT 토큰에서 추출되므로 query param으로 전송하지 않음
     final response = await _apiClient.delete(
       '/api/notifications/token/all',
-      queryParams: {'userId': userId},
     );
   }
 
@@ -77,10 +77,10 @@ class NotificationService {
     int page = 0,
     int size = 20,
   }) async {
+    // userId는 JWT 토큰에서 추출되므로 query param으로 전송하지 않음
     final response = await _apiClient.get(
       '/api/notifications',
       queryParams: {
-        'userId': userId,
         'page': page.toString(),
         'size': size.toString(),
       },
@@ -98,9 +98,9 @@ class NotificationService {
 
   /// 읽지 않은 알림 목록 조회
   Future<List<AppNotification>> getUnreadNotifications(String userId) async {
+    // userId는 JWT 토큰에서 추출되므로 query param으로 전송하지 않음
     final response = await _apiClient.get(
       '/api/notifications/unread',
-      queryParams: {'userId': userId},
     );
 
     if (response.statusCode != 200) {
@@ -115,9 +115,9 @@ class NotificationService {
 
   /// 읽지 않은 알림 수 조회
   Future<int> getUnreadCount(String userId) async {
+    // userId는 JWT 토큰에서 추출되므로 query param으로 전송하지 않음
     final response = await _apiClient.get(
       '/api/notifications/unread-count',
-      queryParams: {'userId': userId},
     );
 
     if (response.statusCode != 200) {
@@ -143,9 +143,9 @@ class NotificationService {
 
   /// 모든 알림 읽음 처리
   Future<void> markAllAsRead(String userId) async {
+    // userId는 JWT 토큰에서 추출되므로 query param으로 전송하지 않음
     final response = await _apiClient.post(
       '/api/notifications/read-all',
-      queryParams: {'userId': userId},
     );
 
     if (response.statusCode != 200) {

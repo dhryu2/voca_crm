@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:voca_crm/core/utils/haptic_helper.dart';
+import 'package:voca_crm/core/utils/message_handler.dart';
 import 'package:voca_crm/core/utils/recent_search_manager.dart';
 import 'package:voca_crm/core/theme/theme_color.dart';
 import 'package:voca_crm/data/datasource/member_service.dart';
@@ -178,7 +179,7 @@ class _SearchScreenState extends State<SearchScreen>
         _reservationResults = reservations;
         _isSearching = false;
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
       // 새로운 검색이 시작되었으면 에러 무시
       if (currentRequestId != _searchRequestId) return;
       if (!mounted) return;
@@ -186,6 +187,19 @@ class _SearchScreenState extends State<SearchScreen>
       setState(() {
         _isSearching = false;
       });
+
+      if (mounted) {
+        // Get current user from context
+        final currentUser = Provider.of<UserViewModel>(context, listen: false).user;
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'SearchScreen',
+          action: '검색',
+          userId: currentUser?.id,
+        );
+      }
     }
   }
 
