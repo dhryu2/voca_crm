@@ -81,10 +81,17 @@ class _BusinessPlaceManagementScreenState
         _filterAndSortPlaces();
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
       setState(() => _isLoading = false);
       if (mounted) {
-        AppMessageHandler.showErrorSnackBar(context, AppMessageHandler.parseErrorMessage(e));
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'BusinessPlaceManagement',
+          action: '사업장 목록 조회',
+          userId: widget.user.id,
+        );
       }
     }
   }
@@ -342,11 +349,15 @@ class _BusinessPlaceManagementScreenState
 
                                 Navigator.pop(context, true);
                                 _loadBusinessPlaces();
-                              } catch (e) {
+                              } catch (e, stackTrace) {
                                 if (mounted) {
-                                  AppMessageHandler.showErrorSnackBar(
+                                  await AppMessageHandler.handleErrorWithLogging(
                                     context,
-                                    AppMessageHandler.parseErrorMessage(e),
+                                    e,
+                                    stackTrace,
+                                    screenName: 'BusinessPlaceManagement',
+                                    action: '사업장 생성',
+                                    userId: widget.user.id,
                                   );
                                 }
                               }
@@ -403,9 +414,17 @@ class _BusinessPlaceManagementScreenState
       if (mounted) {
         AppMessageHandler.showSuccessSnackBar(context, '기본 사업장으로 설정되었습니다');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (mounted) {
-        AppMessageHandler.showErrorSnackBar(context, AppMessageHandler.parseErrorMessage(e));
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'BusinessPlaceManagement',
+          action: '기본 사업장 설정',
+          userId: widget.user.id,
+          businessPlaceId: businessPlaceId,
+        );
       }
     }
   }
@@ -449,9 +468,17 @@ class _BusinessPlaceManagementScreenState
         if (mounted) {
           AppMessageHandler.showSuccessSnackBar(context, '사업장에서 나갔습니다');
         }
-      } catch (e) {
+      } catch (e, stackTrace) {
         if (mounted) {
-          AppMessageHandler.showErrorSnackBar(context, AppMessageHandler.parseErrorMessage(e));
+          await AppMessageHandler.handleErrorWithLogging(
+            context,
+            e,
+            stackTrace,
+            screenName: 'BusinessPlaceManagement',
+            action: '사업장 나가기',
+            userId: widget.user.id,
+            businessPlaceId: item.businessPlace.id,
+          );
         }
       }
     }
@@ -704,11 +731,16 @@ class _BusinessPlaceManagementScreenState
                                 );
 
                                 Navigator.pop(context, true);
-                              } catch (e) {
+                              } catch (e, stackTrace) {
                                 if (mounted) {
-                                  AppMessageHandler.showErrorSnackBar(
+                                  await AppMessageHandler.handleErrorWithLogging(
                                     context,
-                                    AppMessageHandler.parseErrorMessage(e),
+                                    e,
+                                    stackTrace,
+                                    screenName: 'BusinessPlaceManagement',
+                                    action: '사업장 수정',
+                                    userId: widget.user.id,
+                                    businessPlaceId: item.businessPlace.id,
                                   );
                                 }
                               }

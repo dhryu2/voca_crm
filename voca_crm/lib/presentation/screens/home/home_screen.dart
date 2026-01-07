@@ -94,11 +94,21 @@ class _HomeScreenState extends State<HomeScreen> {
         _recentActivities = activities;
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
       setState(() {
         _isLoading = false;
         _error = AppMessageHandler.parseErrorMessage(e);
       });
+      if (mounted) {
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'HomeScreen',
+          action: '대시보드 데이터 조회',
+          userId: widget.user.id,
+        );
+      }
     }
   }
 
@@ -208,23 +218,19 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         );
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       setState(() {
         _isBriefingLoading = false;
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '브리핑 조회 중 오류가 발생했습니다: ${AppMessageHandler.parseErrorMessage(e)}',
-            ),
-            backgroundColor: ThemeColor.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'HomeScreen',
+          action: '브리핑 조회',
+          userId: widget.user.id,
         );
       }
     }

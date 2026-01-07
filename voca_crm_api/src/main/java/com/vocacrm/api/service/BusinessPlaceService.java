@@ -79,7 +79,10 @@ public class BusinessPlaceService {
         long currentCount = userBusinessPlaceRepository.countByUserIdAndRoleAndStatus(
                 userUuid, Role.OWNER, AccessStatus.APPROVED);
 
+        log.debug("사업장 생성 시도 - userId: {}, currentCount: {}, maxBusinessPlaces: {}", userId, currentCount, maxBusinessPlaces);
+
         if (currentCount >= maxBusinessPlaces) {
+            log.warn("사업장 생성 제한 초과 - userId: {}, currentCount: {}, maxBusinessPlaces: {}", userId, currentCount, maxBusinessPlaces);
             throw new InvalidInputException("사업장은 최대 " + maxBusinessPlaces + "개까지 생성 가능합니다.");
         }
 

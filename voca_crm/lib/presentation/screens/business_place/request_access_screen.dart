@@ -44,9 +44,16 @@ class _RequestAccessScreenState extends State<RequestAccessScreen> {
           }
         });
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (mounted) {
-        AppMessageHandler.handleApiError(context, e);
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'RequestAccessScreen',
+          action: '접근 요청 전송',
+          userId: widget.user.id,
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);

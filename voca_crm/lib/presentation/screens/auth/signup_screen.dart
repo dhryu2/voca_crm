@@ -112,7 +112,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
       // 다음 단계로 이동
       _nextStep();
-    } catch (e) {
+    } catch (e, stackTrace) {
       setState(() => _isLoading = false);
       if (mounted) {
         String errorMessage = e.toString();
@@ -120,7 +120,13 @@ class _SignupScreenState extends State<SignupScreen> {
           // 사용자가 취소한 경우 메시지 표시 안함
           return;
         }
-        AppMessageHandler.showErrorSnackBar(context, AppMessageHandler.parseErrorMessage(e));
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'SignupScreen',
+          action: '소셜 로그인 토큰 획득',
+        );
       }
     }
   }
@@ -194,10 +200,16 @@ class _SignupScreenState extends State<SignupScreen> {
       if (mounted) {
         AppMessageHandler.showErrorSnackBar(context, AppMessageHandler.parseErrorMessage(e));
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       setState(() => _isLoading = false);
       if (mounted) {
-        AppMessageHandler.showErrorSnackBar(context, AppMessageHandler.parseErrorMessage(e));
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'SignupScreen',
+          action: '회원가입',
+        );
       }
     }
   }

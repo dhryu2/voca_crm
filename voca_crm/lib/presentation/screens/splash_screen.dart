@@ -124,9 +124,15 @@ class _SplashScreenState extends State<SplashScreen>
           _isFailureBiometricLogin = true;
         });
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (mounted) {
-        AppMessageHandler.showErrorSnackBar(context, '시스템 오류로 인증 실패했습니다.');
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'SplashScreen',
+          action: '자동 로그인',
+        );
       }
     }
   }
@@ -157,9 +163,15 @@ class _SplashScreenState extends State<SplashScreen>
       if (mounted) {
         return result.user;
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (mounted) {
-        AppMessageHandler.handleApiError(context, e);
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'SplashScreen',
+          action: '토큰 갱신',
+        );
         return null;
       }
     }

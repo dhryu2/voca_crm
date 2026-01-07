@@ -48,12 +48,19 @@ class _NoticesManagementScreenState extends State<NoticesManagementScreen> {
           _isLoading = false;
         });
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (mounted) {
         setState(() {
           _error = '공지사항을 불러오는 중 오류가 발생했습니다';
           _isLoading = false;
         });
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'NoticesManagementScreen',
+          action: '공지사항 목록 조회',
+        );
       }
     }
   }
@@ -88,9 +95,15 @@ class _NoticesManagementScreenState extends State<NoticesManagementScreen> {
         AppMessageHandler.showSuccessSnackBar(context, '공지사항이 삭제되었습니다');
         _loadNotices();
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (mounted) {
-        AppMessageHandler.showErrorSnackBar(context, '공지사항 삭제 중 오류가 발생했습니다');
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'NoticesManagementScreen',
+          action: '공지사항 삭제',
+        );
       }
     }
   }

@@ -94,9 +94,17 @@ class _BusinessPlaceSettingsScreenState
           AppMessageHandler.showSuccessSnackBar(context, '기본 사업장으로 설정되었습니다');
         }
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (mounted) {
-        AppMessageHandler.handleApiError(context, e);
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'BusinessPlaceSettings',
+          action: '기본 사업장 설정',
+          userId: widget.user.id,
+          businessPlaceId: widget.businessPlace.id,
+        );
       }
     }
   }

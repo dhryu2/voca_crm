@@ -146,7 +146,8 @@ class BadRequestException extends HttpException {
       final errors = validationErrors!.values.join('\n');
       return '입력 정보를 확인해주세요.\n$errors';
     }
-    return '요청 정보를 확인해주세요.';
+    // API에서 전달된 의미있는 메시지 사용 (예: "사업장은 최대 3개까지 생성 가능합니다.")
+    return message;
   }
 }
 
@@ -178,7 +179,7 @@ class ForbiddenException extends HttpException {
   }) : super(statusCode: 403);
 
   @override
-  String get userMessage => '이 작업을 수행할 권한이 없습니다.';
+  String get userMessage => message;
 }
 
 /// 404 Not Found - 리소스 없음
@@ -198,10 +199,14 @@ class NotFoundException extends HttpException {
 
   @override
   String get userMessage {
+    // API에서 구체적인 메시지가 오면 우선 사용
+    if (message != '요청한 정보를 찾을 수 없습니다.') {
+      return message;
+    }
     if (resourceType != null) {
       return '$resourceType을(를) 찾을 수 없습니다.';
     }
-    return '요청한 정보를 찾을 수 없습니다.';
+    return message;
   }
 }
 
@@ -216,7 +221,7 @@ class ConflictException extends HttpException {
   }) : super(statusCode: 409);
 
   @override
-  String get userMessage => '이미 존재하는 데이터입니다.';
+  String get userMessage => message;
 }
 
 /// 422 Unprocessable Entity - 처리 불가
@@ -233,7 +238,13 @@ class UnprocessableException extends HttpException {
   }) : super(statusCode: 422);
 
   @override
-  String get userMessage => '요청 데이터를 처리할 수 없습니다. 입력값을 확인해주세요.';
+  String get userMessage {
+    if (errors != null && errors!.isNotEmpty) {
+      final errorMessages = errors!.values.join('\n');
+      return '입력값을 확인해주세요.\n$errorMessages';
+    }
+    return message;
+  }
 }
 
 /// 429 Too Many Requests - 요청 횟수 초과

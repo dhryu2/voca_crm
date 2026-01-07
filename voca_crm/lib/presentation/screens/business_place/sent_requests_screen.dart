@@ -34,10 +34,17 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
         _requests = requests;
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
       setState(() => _isLoading = false);
       if (mounted) {
-        AppMessageHandler.handleApiError(context, e);
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'SentRequestsScreen',
+          action: '보낸 요청 목록 조회',
+          userId: widget.user.id,
+        );
       }
     }
   }
@@ -52,9 +59,16 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
       if (mounted) {
         AppMessageHandler.showSuccessSnackBar(context, '요청을 삭제했습니다');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (mounted) {
-        AppMessageHandler.handleApiError(context, e);
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'SentRequestsScreen',
+          action: '요청 취소',
+          userId: widget.user.id,
+        );
       }
     }
   }
@@ -69,9 +83,16 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
       if (mounted) {
         AppMessageHandler.showSuccessSnackBar(context, '요청 결과를 확인했습니다');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (mounted) {
-        AppMessageHandler.handleApiError(context, e);
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'SentRequestsScreen',
+          action: '결과 확인 표시',
+          userId: widget.user.id,
+        );
       }
     }
   }
