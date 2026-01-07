@@ -6,6 +6,8 @@ import com.vocacrm.api.dto.BusinessPlaceMemberDTO;
 import com.vocacrm.api.dto.BusinessPlaceWithRoleDTO;
 import com.vocacrm.api.dto.CreateBusinessPlaceResponse;
 import com.vocacrm.api.dto.SetDefaultBusinessPlaceResponse;
+import com.vocacrm.api.exception.AccessDeniedException;
+import com.vocacrm.api.exception.BusinessException;
 import com.vocacrm.api.exception.InvalidInputException;
 import com.vocacrm.api.exception.ResourceNotFoundException;
 import com.vocacrm.api.model.*;
@@ -63,7 +65,7 @@ public class BusinessPlaceService {
                 return id;
             }
         }
-        throw new RuntimeException("사업장 ID 생성 실패: 중복 ID가 너무 많습니다");
+        throw new BusinessException("사업장 ID 생성 실패: 중복 ID가 너무 많습니다", "ID_GENERATION_FAILED");
     }
 
     @Transactional
@@ -78,7 +80,7 @@ public class BusinessPlaceService {
                 userUuid, Role.OWNER, AccessStatus.APPROVED);
 
         if (currentCount >= maxBusinessPlaces) {
-            throw new RuntimeException("사업장은 최대 " + maxBusinessPlaces + "개까지 생성 가능합니다.");
+            throw new InvalidInputException("사업장은 최대 " + maxBusinessPlaces + "개까지 생성 가능합니다.");
         }
 
         // Generate unique 7-character ID
@@ -102,10 +104,7 @@ public class BusinessPlaceService {
             userRepository.save(user);
         }
 
-        return CreateBusinessPlaceResponse.builder()
-                .businessPlace(saved)
-                .user(user)
-                .build();
+        return CreateBusinessPlaceResponse.from(saved, user);
     }
 
     private int getMaxBusinessPlaces(String tier) {
@@ -133,7 +132,7 @@ public class BusinessPlaceService {
      */
     public BusinessPlace getBusinessPlaceById(String businessPlaceId) {
         return businessPlaceRepository.findById(businessPlaceId)
-                .orElseThrow(() -> new RuntimeException("사업장을 찾을 수 없습니다"));
+                .orElseThrow(() -> new ResourceNotFoundException("사업장을 찾을 수 없습니다"));
     }
 
     /**
@@ -305,15 +304,15 @@ public class BusinessPlaceService {
         // Verify requester is owner of the business place
         UserBusinessPlace ownership = userBusinessPlaceRepository
                 .findByUserIdAndBusinessPlaceId(UUID.fromString(ownerId), request.getBusinessPlaceId())
-                .orElseThrow(() -> new RuntimeException("권한이 없습니다"));
+                .orElseThrow(() -> new AccessDeniedException("권한이 없습니다"));
 
         if (ownership.getRole() != Role.OWNER || ownership.getStatus() != AccessStatus.APPROVED) {
-            throw new RuntimeException("권한이 없습니다");
+            throw new AccessDeniedException("권한이 없습니다");
         }
 
         // Check if request is already processed
         if (request.getStatus() != AccessStatus.PENDING) {
-            throw new RuntimeException("이미 처리된 요청입니다");
+            throw new InvalidInputException("이미 처리된 요청입니다");
         }
 
         // Update request status
@@ -367,15 +366,15 @@ public class BusinessPlaceService {
         // Verify requester is owner of the business place
         UserBusinessPlace ownership = userBusinessPlaceRepository
                 .findByUserIdAndBusinessPlaceId(UUID.fromString(ownerId), request.getBusinessPlaceId())
-                .orElseThrow(() -> new RuntimeException("권한이 없습니다"));
+                .orElseThrow(() -> new AccessDeniedException("권한이 없습니다"));
 
         if (ownership.getRole() != Role.OWNER || ownership.getStatus() != AccessStatus.APPROVED) {
-            throw new RuntimeException("권한이 없습니다");
+            throw new AccessDeniedException("권한이 없습니다");
         }
 
         // Check if request is already processed
         if (request.getStatus() != AccessStatus.PENDING) {
-            throw new RuntimeException("이미 처리된 요청입니다");
+            throw new InvalidInputException("이미 처리된 요청입니다");
         }
 
         // Update request status
@@ -410,11 +409,11 @@ public class BusinessPlaceService {
     @Transactional
     public void deleteRequest(String requestId, String userId) {
         BusinessPlaceAccessRequest request = accessRequestRepository.findById(UUID.fromString(requestId))
-                .orElseThrow(() -> new RuntimeException("요청을 찾을 수 없습니다"));
+                .orElseThrow(() -> new ResourceNotFoundException("요청을 찾을 수 없습니다"));
 
         // Only the requester can delete their own request
         if (!request.getUserId().equals(UUID.fromString(userId))) {
-            throw new RuntimeException("권한이 없습니다");
+            throw new AccessDeniedException("권한이 없습니다");
         }
 
         accessRequestRepository.delete(request);
@@ -430,11 +429,11 @@ public class BusinessPlaceService {
     @Transactional
     public BusinessPlaceAccessRequest markRequestAsRead(String requestId, String userId) {
         BusinessPlaceAccessRequest request = accessRequestRepository.findById(UUID.fromString(requestId))
-                .orElseThrow(() -> new RuntimeException("요청을 찾을 수 없습니다"));
+                .orElseThrow(() -> new ResourceNotFoundException("요청을 찾을 수 없습니다"));
 
         // Only the requester can mark as read
         if (!request.getUserId().equals(UUID.fromString(userId))) {
-            throw new RuntimeException("권한이 없습니다");
+            throw new AccessDeniedException("권한이 없습니다");
         }
 
         request.setIsReadByRequester(true);
@@ -445,11 +444,11 @@ public class BusinessPlaceService {
     public void removeBusinessPlace(String userId, String businessPlaceId) {
         UserBusinessPlace ubp = userBusinessPlaceRepository
                 .findByUserIdAndBusinessPlaceId(UUID.fromString(userId), businessPlaceId)
-                .orElseThrow(() -> new RuntimeException("Access not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("사업장 접근 정보를 찾을 수 없습니다"));
 
         // Cannot remove if you're the owner
         if (ubp.getRole() == Role.OWNER) {
-            throw new RuntimeException("Cannot remove business place you own");
+            throw new InvalidInputException("본인이 소유한 사업장은 탈퇴할 수 없습니다");
         }
 
         // 사용자 참조 정리 (탈퇴 전 해당 사용자의 모든 참조를 NULL로 설정)
@@ -513,14 +512,14 @@ public class BusinessPlaceService {
     @Transactional
     public BusinessPlace updateBusinessPlace(String id, BusinessPlace businessPlace, String userId) {
         UserBusinessPlace ubp = userBusinessPlaceRepository.findByUserIdAndBusinessPlaceId(UUID.fromString(userId), id)
-                .orElseThrow(() -> new RuntimeException("Access denied"));
+                .orElseThrow(() -> new AccessDeniedException("사업장 접근 권한이 없습니다"));
 
         if (ubp.getRole() != Role.OWNER) {
-            throw new RuntimeException("Only OWNER can update business place");
+            throw new AccessDeniedException("OWNER만 사업장 정보를 수정할 수 있습니다");
         }
 
         BusinessPlace existing = businessPlaceRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Business place not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("사업장을 찾을 수 없습니다"));
 
         if (businessPlace.getName() != null) {
             existing.setName(businessPlace.getName());
@@ -538,17 +537,15 @@ public class BusinessPlaceService {
     @Transactional
     public SetDefaultBusinessPlaceResponse setDefaultBusinessPlace(String userId, String businessPlaceId) {
         userBusinessPlaceRepository.findByUserIdAndBusinessPlaceId(UUID.fromString(userId), businessPlaceId)
-                .orElseThrow(() -> new RuntimeException("Access denied"));
+                .orElseThrow(() -> new AccessDeniedException("사업장 접근 권한이 없습니다"));
 
         User user = userRepository.findById(UUID.fromString(userId))
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다"));
 
         user.setDefaultBusinessPlaceId(businessPlaceId);
         User updatedUser = userRepository.save(user);
 
-        return SetDefaultBusinessPlaceResponse.builder()
-                .user(updatedUser)
-                .build();
+        return SetDefaultBusinessPlaceResponse.from(updatedUser);
     }
 
     /**
@@ -561,7 +558,7 @@ public class BusinessPlaceService {
     public List<BusinessPlaceMemberDTO> getBusinessPlaceMembers(String businessPlaceId, String requesterId) {
         // 요청자가 해당 사업장의 멤버인지 확인
         userBusinessPlaceRepository.findByUserIdAndBusinessPlaceId(UUID.fromString(requesterId), businessPlaceId)
-                .orElseThrow(() -> new RuntimeException("권한이 없습니다"));
+                .orElseThrow(() -> new AccessDeniedException("권한이 없습니다"));
 
         List<UserBusinessPlace> members = userBusinessPlaceRepository.findByBusinessPlaceIdAndStatus(
                 businessPlaceId, AccessStatus.APPROVED);
@@ -597,10 +594,10 @@ public class BusinessPlaceService {
         // 요청자가 Owner인지 확인
         UserBusinessPlace ownerUbp = userBusinessPlaceRepository
                 .findByUserIdAndBusinessPlaceId(UUID.fromString(ownerId), targetUbp.getBusinessPlaceId())
-                .orElseThrow(() -> new RuntimeException("권한이 없습니다"));
+                .orElseThrow(() -> new AccessDeniedException("권한이 없습니다"));
 
         if (ownerUbp.getRole() != Role.OWNER) {
-            throw new RuntimeException("Owner만 역할을 변경할 수 있습니다");
+            throw new AccessDeniedException("Owner만 역할을 변경할 수 있습니다");
         }
 
         // OWNER 역할로는 변경 불가
@@ -641,10 +638,10 @@ public class BusinessPlaceService {
         // 요청자가 Owner인지 확인
         UserBusinessPlace ownerUbp = userBusinessPlaceRepository
                 .findByUserIdAndBusinessPlaceId(ownerUuid, targetUbp.getBusinessPlaceId())
-                .orElseThrow(() -> new RuntimeException("권한이 없습니다"));
+                .orElseThrow(() -> new AccessDeniedException("권한이 없습니다"));
 
         if (ownerUbp.getRole() != Role.OWNER) {
-            throw new RuntimeException("Owner만 멤버를 삭제할 수 있습니다");
+            throw new AccessDeniedException("Owner만 멤버를 삭제할 수 있습니다");
         }
 
         // 본인(Owner)은 삭제 불가
@@ -695,10 +692,10 @@ public class BusinessPlaceService {
 
         // Owner 권한 확인
         UserBusinessPlace ubp = userBusinessPlaceRepository.findByUserIdAndBusinessPlaceId(UUID.fromString(userId), businessPlaceId)
-                .orElseThrow(() -> new RuntimeException("권한이 없습니다"));
+                .orElseThrow(() -> new AccessDeniedException("권한이 없습니다"));
 
         if (ubp.getRole() != Role.OWNER) {
-            throw new RuntimeException("Owner만 사업장을 삭제할 수 있습니다");
+            throw new AccessDeniedException("Owner만 사업장을 삭제할 수 있습니다");
         }
 
         // 각 테이블의 데이터 개수 조회
@@ -754,10 +751,10 @@ public class BusinessPlaceService {
 
         // Owner 권한 확인
         UserBusinessPlace ubp = userBusinessPlaceRepository.findByUserIdAndBusinessPlaceId(UUID.fromString(userId), businessPlaceId)
-                .orElseThrow(() -> new RuntimeException("권한이 없습니다"));
+                .orElseThrow(() -> new AccessDeniedException("권한이 없습니다"));
 
         if (ubp.getRole() != Role.OWNER) {
-            throw new RuntimeException("Owner만 사업장을 삭제할 수 있습니다");
+            throw new AccessDeniedException("Owner만 사업장을 삭제할 수 있습니다");
         }
 
         // 사업장 이름 확인 (Type-to-Confirm)

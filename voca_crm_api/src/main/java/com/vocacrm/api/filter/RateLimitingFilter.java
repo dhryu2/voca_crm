@@ -53,6 +53,7 @@ public class RateLimitingFilter extends OncePerRequestFilter {
         SEARCH,     // 검색 API
         VOICE_AI,   // 음성 명령 AI 분석 (/api/voice/command) - 보수적 제한
         VOICE,      // 음성 명령 기타 (/api/voice/continue, /api/voice/daily-briefing 등)
+        ERROR_LOG,  // 오류 로그 POST (비인증 허용, 보수적 제한)
         API,        // 일반 API
         EXCLUDED    // Rate Limit 제외 (헬스체크, Swagger 등)
     }
@@ -191,6 +192,11 @@ public class RateLimitingFilter extends OncePerRequestFilter {
             return EndpointType.AUTH;
         }
 
+        // 오류 로그 POST (비인증 허용, 보수적 제한)
+        if (uri.equals("/api/error-logs") || uri.startsWith("/api/error-logs/")) {
+            return EndpointType.ERROR_LOG;
+        }
+
         // 검색 관련
         if (uri.contains("/search") || uri.contains("/find")) {
             return EndpointType.SEARCH;
@@ -245,6 +251,7 @@ public class RateLimitingFilter extends OncePerRequestFilter {
             case SEARCH -> rateLimitConfig.getSearch();
             case VOICE_AI -> rateLimitConfig.getVoiceAi();
             case VOICE -> rateLimitConfig.getVoice();
+            case ERROR_LOG -> rateLimitConfig.getErrorLog();
             default -> rateLimitConfig.getApi();
         };
     }

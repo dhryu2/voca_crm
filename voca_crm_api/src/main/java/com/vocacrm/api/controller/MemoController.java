@@ -2,12 +2,17 @@ package com.vocacrm.api.controller;
 
 import com.vocacrm.api.dto.request.MemoCreateRequest;
 import com.vocacrm.api.dto.request.MemoUpdateRequest;
+import com.vocacrm.api.exception.AccessDeniedException;
 import com.vocacrm.api.model.AccessStatus;
 import com.vocacrm.api.model.Member;
 import com.vocacrm.api.model.Memo;
 import com.vocacrm.api.repository.UserBusinessPlaceRepository;
 import com.vocacrm.api.service.MemberService;
 import com.vocacrm.api.service.MemoService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -40,6 +45,7 @@ import java.util.UUID;
 @RestController  // @Controller + @ResponseBody (JSON 자동 변환)
 @RequestMapping("/api/memos")  // 기본 URL 매핑
 @RequiredArgsConstructor  // Lombok: final 필드 생성자 자동 생성 (의존성 주입)
+@Tag(name = "메모", description = "회원별 메모 CRUD API")
 public class MemoController {
 
     /**
@@ -80,6 +86,12 @@ public class MemoController {
      * @return 메모 정보 (HTTP 200 OK)
      * @throws RuntimeException 메모가 존재하지 않거나 권한이 없는 경우 (HTTP 500)
      */
+    @Operation(summary = "메모 상세 조회", description = "ID로 특정 메모 조회")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "403", description = "접근 권한 없음"),
+            @ApiResponse(responseCode = "404", description = "메모 없음")
+    })
     @GetMapping("/{id}")
     public ResponseEntity<Memo> getMemoById(
             @PathVariable String id,
@@ -110,6 +122,11 @@ public class MemoController {
      * @param servletRequest HttpServletRequest (JWT에서 추출한 정보 포함)
      * @return 해당 사업장의 전체 메모 목록 (최신순, HTTP 200 OK)
      */
+    @Operation(summary = "사업장별 메모 조회", description = "특정 사업장의 전체 메모 목록 조회")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "403", description = "사업장 접근 권한 없음")
+    })
     @GetMapping("/by-business-place/{businessPlaceId}")
     public ResponseEntity<List<Memo>> getMemosByBusinessPlace(
             @PathVariable String businessPlaceId,
@@ -121,7 +138,7 @@ public class MemoController {
                         UUID.fromString(userId), businessPlaceId, AccessStatus.APPROVED);
 
         if (!hasAccess) {
-            throw new RuntimeException("해당 사업장의 메모에 대한 접근 권한이 없습니다.");
+            throw new AccessDeniedException("해당 사업장의 메모에 대한 접근 권한이 없습니다.");
         }
 
         List<Memo> memos = memoService.getMemosByBusinessPlace(businessPlaceId);
@@ -171,6 +188,12 @@ public class MemoController {
      * @return 해당 회원의 전체 메모 목록 (최신순, HTTP 200 OK)
      * @throws RuntimeException 회원이 존재하지 않거나 권한이 없는 경우 (HTTP 500)
      */
+    @Operation(summary = "회원별 메모 조회", description = "특정 회원의 전체 메모 목록 조회 (최신순)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "403", description = "접근 권한 없음"),
+            @ApiResponse(responseCode = "404", description = "회원 없음")
+    })
     @GetMapping("/member/{memberId}")
     public ResponseEntity<java.util.Map<String, Object>> getMemosByMemberId(
             @PathVariable String memberId,
@@ -185,7 +208,7 @@ public class MemoController {
                         UUID.fromString(userId), member.getBusinessPlaceId(), AccessStatus.APPROVED);
 
         if (!hasAccess) {
-            throw new RuntimeException("해당 회원의 메모에 대한 접근 권한이 없습니다.");
+            throw new AccessDeniedException("해당 회원의 메모에 대한 접근 권한이 없습니다.");
         }
 
         List<Memo> memos = memoService.getMemosByMemberId(memberId, member.getBusinessPlaceId());
@@ -227,6 +250,12 @@ public class MemoController {
      * @return 가장 최근 메모 (HTTP 200 OK) 또는 메모가 없으면 404
      * @throws RuntimeException 회원이 존재하지 않거나 권한이 없는 경우 (HTTP 500)
      */
+    @Operation(summary = "회원 최신 메모 조회", description = "특정 회원의 가장 최근 메모 하나 조회")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "403", description = "접근 권한 없음"),
+            @ApiResponse(responseCode = "404", description = "회원 또는 메모 없음")
+    })
     @GetMapping("/member/{memberId}/latest")
     public ResponseEntity<Memo> getLatestMemo(
             @PathVariable String memberId,
@@ -241,7 +270,7 @@ public class MemoController {
                         UUID.fromString(userId), member.getBusinessPlaceId(), AccessStatus.APPROVED);
 
         if (!hasAccess) {
-            throw new RuntimeException("해당 회원의 메모에 대한 접근 권한이 없습니다.");
+            throw new AccessDeniedException("해당 회원의 메모에 대한 접근 권한이 없습니다.");
         }
 
         Memo memo = memoService.getLatestMemoByMemberId(memberId, member.getBusinessPlaceId());
@@ -276,6 +305,11 @@ public class MemoController {
      * @param memo 생성할 메모 정보 (JSON)
      * @return 생성된 메모 정보 (ID와 타임스탬프 포함, HTTP 200 OK)
      */
+    @Operation(summary = "메모 생성", description = "새로운 메모 등록")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "생성 성공"),
+            @ApiResponse(responseCode = "400", description = "잘못된 요청")
+    })
     @PostMapping
     public ResponseEntity<Memo> createMemo(
             @Valid @RequestBody MemoCreateRequest request,
@@ -315,6 +349,8 @@ public class MemoController {
      * @param memo 생성할 메모 정보 (JSON)
      * @return 생성된 메모 정보 (HTTP 200 OK)
      */
+    @Operation(summary = "메모 생성 (자동 삭제)", description = "메모 개수 제한 초과 시 가장 오래된 메모 삭제 후 생성")
+    @ApiResponse(responseCode = "200", description = "생성 성공")
     @PostMapping("/with-deletion")
     public ResponseEntity<Memo> createMemoWithDeletion(
             @Valid @RequestBody MemoCreateRequest request,
@@ -406,6 +442,12 @@ public class MemoController {
      * @return 수정된 메모 정보 (HTTP 200 OK)
      * @throws RuntimeException 메모가 존재하지 않는 경우 (HTTP 500)
      */
+    @Operation(summary = "메모 수정", description = "기존 메모 내용 수정")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "수정 성공"),
+            @ApiResponse(responseCode = "403", description = "수정 권한 없음"),
+            @ApiResponse(responseCode = "404", description = "메모 없음")
+    })
     @PutMapping("/{id}")
     public ResponseEntity<Memo> updateMemo(
             @PathVariable String id,
@@ -447,6 +489,8 @@ public class MemoController {
      * @return 응답 본문 없음 (HTTP 204 No Content)
      * @deprecated Soft Delete 사용 권장 - softDeleteMemo 사용
      */
+    @Operation(summary = "메모 삭제 (Deprecated)", description = "메모 Hard Delete - softDeleteMemo 사용 권장")
+    @ApiResponse(responseCode = "204", description = "삭제 성공")
     @Deprecated
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteMemo(
@@ -489,6 +533,12 @@ public class MemoController {
      * @param businessPlaceId 사업장 ID
      * @return 삭제된 메모 정보 (HTTP 200 OK)
      */
+    @Operation(summary = "메모 Soft Delete", description = "메모를 삭제 대기 상태로 전환")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "삭제 성공"),
+            @ApiResponse(responseCode = "403", description = "삭제 권한 없음"),
+            @ApiResponse(responseCode = "404", description = "메모 없음")
+    })
     @DeleteMapping("/{id}/soft")
     public ResponseEntity<Memo> softDeleteMemo(
             @PathVariable String id,
@@ -524,6 +574,8 @@ public class MemoController {
      * @param servletRequest HttpServletRequest (JWT에서 추출한 정보 포함)
      * @return 삭제 대기 중인 메모 목록 (HTTP 200 OK)
      */
+    @Operation(summary = "삭제 대기 메모 조회", description = "삭제 대기 상태인 메모 목록 조회")
+    @ApiResponse(responseCode = "200", description = "조회 성공")
     @GetMapping("/deleted")
     public ResponseEntity<java.util.Map<String, Object>> getDeletedMemos(
             @RequestParam String businessPlaceId,
@@ -555,6 +607,11 @@ public class MemoController {
      * @param servletRequest HttpServletRequest (JWT에서 추출한 정보 포함)
      * @return 삭제 대기 중인 메모 목록 (HTTP 200 OK)
      */
+    @Operation(summary = "회원별 삭제 대기 메모 조회", description = "특정 회원의 삭제 대기 메모 목록 조회")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "403", description = "접근 권한 없음")
+    })
     @GetMapping("/member/{memberId}/deleted")
     public ResponseEntity<java.util.Map<String, Object>> getDeletedMemosByMember(
             @PathVariable String memberId,
@@ -569,7 +626,7 @@ public class MemoController {
                         UUID.fromString(userId), member.getBusinessPlaceId(), AccessStatus.APPROVED);
 
         if (!hasAccess) {
-            throw new RuntimeException("해당 회원의 메모에 대한 접근 권한이 없습니다.");
+            throw new AccessDeniedException("해당 회원의 메모에 대한 접근 권한이 없습니다.");
         }
 
         List<Memo> deletedMemos = memoService.getDeletedMemosByMemberId(memberId, member.getBusinessPlaceId());
@@ -596,6 +653,12 @@ public class MemoController {
      * @param businessPlaceId 사업장 ID
      * @return 복원된 메모 정보 (HTTP 200 OK)
      */
+    @Operation(summary = "메모 복원", description = "삭제 대기 메모 복원 (MANAGER 이상)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "복원 성공"),
+            @ApiResponse(responseCode = "403", description = "복원 권한 없음"),
+            @ApiResponse(responseCode = "404", description = "메모 없음")
+    })
     @PostMapping("/{id}/restore")
     public ResponseEntity<Memo> restoreMemo(
             @PathVariable String id,
@@ -630,6 +693,12 @@ public class MemoController {
      * @param businessPlaceId 사업장 ID
      * @return 응답 본문 없음 (HTTP 204 No Content)
      */
+    @Operation(summary = "메모 영구 삭제", description = "삭제 대기 메모 영구 삭제 (MANAGER 이상)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "삭제 성공"),
+            @ApiResponse(responseCode = "403", description = "삭제 권한 없음"),
+            @ApiResponse(responseCode = "404", description = "메모 없음")
+    })
     @DeleteMapping("/{id}/permanent")
     public ResponseEntity<Void> permanentDeleteMemo(
             @PathVariable String id,
@@ -653,6 +722,12 @@ public class MemoController {
      * @param servletRequest HttpServletRequest (JWT에서 추출한 정보 포함)
      * @return 업데이트된 메모 정보 (HTTP 200 OK)
      */
+    @Operation(summary = "메모 중요도 토글", description = "메모의 중요 표시 on/off 전환")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "업데이트 성공"),
+            @ApiResponse(responseCode = "403", description = "수정 권한 없음"),
+            @ApiResponse(responseCode = "404", description = "메모 없음")
+    })
     @PatchMapping("/{id}/toggle-important")
     public ResponseEntity<Memo> toggleImportant(
             @PathVariable String id,

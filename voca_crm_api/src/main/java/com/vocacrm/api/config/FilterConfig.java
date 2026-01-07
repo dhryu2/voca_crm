@@ -23,7 +23,7 @@ public class FilterConfig {
                 new FilterRegistrationBean<>();
 
         registrationBean.setFilter(jwtAuthenticationFilter);
-        registrationBean.addUrlPatterns("/api/*");  // /api/** 경로에만 적용
+        registrationBean.addUrlPatterns("/api/*");  // 서블릿 필터에서 /api/* 는 /api/xxx 및 하위 경로 모두 매칭
         registrationBean.setOrder(1);  // 필터 순서 (낮을수록 먼저 실행)
         registrationBean.setName("jwtAuthenticationFilter");
 

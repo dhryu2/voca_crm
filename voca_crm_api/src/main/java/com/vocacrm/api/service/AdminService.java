@@ -13,6 +13,7 @@ import com.vocacrm.api.repository.BusinessPlaceRepository;
 import com.vocacrm.api.repository.MemberRepository;
 import com.vocacrm.api.repository.UserBusinessPlaceRepository;
 import com.vocacrm.api.repository.UserRepository;
+import com.vocacrm.api.exception.AccessDeniedException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -48,7 +49,7 @@ public class AdminService {
      */
     public void validateSystemAdmin(Boolean isSystemAdmin) {
         if (isSystemAdmin == null || !isSystemAdmin) {
-            throw new RuntimeException("시스템 관리자 권한이 필요합니다.");
+            throw new AccessDeniedException("시스템 관리자 권한이 필요합니다.");
         }
     }
 

@@ -17,7 +17,7 @@ import java.util.Map;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ConversationContextDto {
+public class ConversationContextDTO {
 
     /**
      * 대화 세션 ID (UUID)

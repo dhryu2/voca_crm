@@ -6,6 +6,10 @@ import com.vocacrm.api.exception.InvalidInputException;
 import com.vocacrm.api.exception.InvalidTokenException;
 import com.vocacrm.api.exception.ResourceNotFoundException;
 import com.vocacrm.api.service.AuthService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
@@ -21,6 +25,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
+@Tag(name = "인증", description = "소셜 로그인, 회원가입, 토큰 관리 API")
 public class AuthController {
 
     private final AuthService authService;
@@ -29,6 +34,12 @@ public class AuthController {
      * 소셜 로그인 (Google, Kakao, Apple)
      * Provider별로 Token을 검증하고 JWT 토큰 발급
      */
+    @Operation(summary = "소셜 로그인", description = "Google, Kakao, Apple 소셜 로그인으로 JWT 토큰 발급")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "로그인 성공"),
+            @ApiResponse(responseCode = "400", description = "잘못된 요청"),
+            @ApiResponse(responseCode = "404", description = "사용자 없음 (회원가입 필요)")
+    })
     @PostMapping("/login")
     public ResponseEntity<?> loginWithSocialToken(
             @Valid @RequestBody SocialLoginRequest request,
@@ -76,6 +87,12 @@ public class AuthController {
      * 소셜 회원가입 (Google, Kakao, Apple)
      * Provider별로 Token을 검증하고 사용자 생성 후 JWT 토큰 발급
      */
+    @Operation(summary = "소셜 회원가입", description = "Google, Kakao, Apple 소셜 계정으로 회원가입 후 JWT 토큰 발급")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "회원가입 성공"),
+            @ApiResponse(responseCode = "400", description = "잘못된 요청"),
+            @ApiResponse(responseCode = "409", description = "이미 존재하는 사용자")
+    })
     @PostMapping("/signup")
     public ResponseEntity<?> signupWithSocialToken(
             @Valid @RequestBody SocialSignupRequest request,
@@ -125,6 +142,12 @@ public class AuthController {
      * Refresh Token으로 새로운 Access Token 발급 (Rotation 적용)
      * 새로운 Refresh Token도 함께 반환됨
      */
+    @Operation(summary = "토큰 갱신", description = "Refresh Token으로 새로운 Access Token과 Refresh Token 발급")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "토큰 갱신 성공"),
+            @ApiResponse(responseCode = "401", description = "유효하지 않은 Refresh Token"),
+            @ApiResponse(responseCode = "404", description = "사용자 없음")
+    })
     @PostMapping("/refresh")
     public ResponseEntity<?> refreshToken(
             @Valid @RequestBody RefreshTokenRequest request,
@@ -173,6 +196,8 @@ public class AuthController {
     /**
      * 로그아웃 (현재 Refresh Token 폐기)
      */
+    @Operation(summary = "로그아웃", description = "현재 기기에서 로그아웃 (Refresh Token 폐기)")
+    @ApiResponse(responseCode = "200", description = "로그아웃 성공")
     @PostMapping("/logout")
     public ResponseEntity<?> logout(@Valid @RequestBody LogoutRequest request) {
         try {
@@ -189,6 +214,11 @@ public class AuthController {
      * 모든 기기에서 로그아웃 (모든 Refresh Token 폐기)
      * 인증 필요 (Authorization 헤더에서 userId 추출)
      */
+    @Operation(summary = "모든 기기 로그아웃", description = "모든 기기에서 로그아웃 (모든 Refresh Token 폐기)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "로그아웃 성공"),
+            @ApiResponse(responseCode = "401", description = "인증 필요")
+    })
     @PostMapping("/logout-all")
     public ResponseEntity<?> logoutAllDevices(HttpServletRequest httpRequest) {
         try {
