@@ -4,6 +4,11 @@ import com.vocacrm.api.dto.request.MemberCreateRequest;
 import com.vocacrm.api.dto.request.MemberUpdateRequest;
 import com.vocacrm.api.model.Member;
 import com.vocacrm.api.service.MemberService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -44,6 +49,7 @@ import java.util.UUID;
 @RestController  // @Controller + @ResponseBody (JSON 자동 변환)
 @RequestMapping("/api/members")  // 기본 URL 매핑
 @RequiredArgsConstructor  // Lombok: final 필드 생성자 자동 생성 (의존성 주입)
+@Tag(name = "회원", description = "회원 CRUD 및 검색 API")
 public class MemberController {
 
     /**
@@ -81,6 +87,8 @@ public class MemberController {
      * @param servletRequest HttpServletRequest (JWT에서 추출한 정보 포함)
      * @return 페이징된 회원 목록 (HTTP 200 OK)
      */
+    @Operation(summary = "회원 목록 조회", description = "페이징된 회원 목록 조회 (사용자 접근 가능 사업장 기준)")
+    @ApiResponse(responseCode = "200", description = "조회 성공")
     @GetMapping
     public Page<Member> getAllMembers(
             @RequestParam(defaultValue = "0") int skip,
@@ -112,6 +120,12 @@ public class MemberController {
      * @return 회원 정보 (HTTP 200 OK)
      * @throws RuntimeException 회원이 존재하지 않거나 권한이 없는 경우 (HTTP 500)
      */
+    @Operation(summary = "회원 상세 조회", description = "ID로 특정 회원 정보 조회")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "403", description = "접근 권한 없음"),
+            @ApiResponse(responseCode = "404", description = "회원 없음")
+    })
     @GetMapping("/{id}")
     public ResponseEntity<Member> getMemberById(
             @PathVariable String id,
@@ -149,6 +163,8 @@ public class MemberController {
      * @param servletRequest HttpServletRequest (JWT에서 추출한 정보 포함)
      * @return 해당 회원번호를 가진 회원 목록 (HTTP 200 OK)
      */
+    @Operation(summary = "회원번호로 조회", description = "회원번호로 회원 목록 조회 (중복 가능)")
+    @ApiResponse(responseCode = "200", description = "조회 성공")
     @GetMapping("/by-number/{number}")
     public ResponseEntity<java.util.Map<String, Object>> getMembersByNumber(
             @PathVariable String number,
@@ -185,6 +201,11 @@ public class MemberController {
      * @throws IllegalArgumentException businessPlaceId가 null이거나 empty인 경우 (HTTP 400)
      * @throws RuntimeException 사업장 접근 권한이 없는 경우 (HTTP 500)
      */
+    @Operation(summary = "사업장별 회원 조회", description = "특정 사업장에 속한 회원 목록 조회")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "403", description = "사업장 접근 권한 없음")
+    })
     @GetMapping("/by-business-place/{businessPlaceId}")
     public ResponseEntity<java.util.Map<String, Object>> getMembersByBusinessPlace(
             @PathVariable String businessPlaceId,
@@ -232,6 +253,8 @@ public class MemberController {
      * @param servletRequest HttpServletRequest (JWT에서 추출한 정보 포함)
      * @return 검색된 회원 목록 (HTTP 200 OK)
      */
+    @Operation(summary = "회원 검색", description = "회원번호, 이름, 전화번호, 이메일로 검색")
+    @ApiResponse(responseCode = "200", description = "검색 성공")
     @GetMapping("/search")
     public ResponseEntity<java.util.Map<String, Object>> searchMembers(
             @RequestParam(required = false) String memberNumber,
@@ -275,6 +298,11 @@ public class MemberController {
      * @param member 생성할 회원 정보 (JSON)
      * @return 생성된 회원 정보 (ID와 타임스탬프 포함, HTTP 200 OK)
      */
+    @Operation(summary = "회원 생성", description = "새로운 회원 등록")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "생성 성공"),
+            @ApiResponse(responseCode = "400", description = "잘못된 요청")
+    })
     @PostMapping
     public ResponseEntity<Member> createMember(@Valid @RequestBody MemberCreateRequest request) {
         Member member = new Member();
@@ -331,6 +359,12 @@ public class MemberController {
      * @return 수정된 회원 정보 (HTTP 200 OK)
      * @throws RuntimeException 회원이 존재하지 않는 경우 (HTTP 500)
      */
+    @Operation(summary = "회원 수정", description = "기존 회원 정보 수정")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "수정 성공"),
+            @ApiResponse(responseCode = "403", description = "수정 권한 없음"),
+            @ApiResponse(responseCode = "404", description = "회원 없음")
+    })
     @PutMapping("/{id}")
     public ResponseEntity<Member> updateMember(
             @PathVariable String id,
@@ -380,6 +414,8 @@ public class MemberController {
      * @return 응답 본문 없음 (HTTP 204 No Content)
      * @deprecated Soft Delete 사용 권장 - softDeleteMember 사용
      */
+    @Operation(summary = "회원 삭제 (Deprecated)", description = "회원 Hard Delete - softDeleteMember 사용 권장")
+    @ApiResponse(responseCode = "204", description = "삭제 성공")
     @Deprecated
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteMember(
@@ -425,6 +461,12 @@ public class MemberController {
      * @param businessPlaceId 사업장 ID
      * @return 삭제된 회원 정보 (HTTP 200 OK)
      */
+    @Operation(summary = "회원 Soft Delete", description = "회원을 삭제 대기 상태로 전환")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "삭제 성공"),
+            @ApiResponse(responseCode = "403", description = "삭제 권한 없음"),
+            @ApiResponse(responseCode = "404", description = "회원 없음")
+    })
     @DeleteMapping("/{id}/soft")
     public ResponseEntity<Member> softDeleteMember(
             @PathVariable String id,
@@ -461,6 +503,8 @@ public class MemberController {
      * @param servletRequest HttpServletRequest (JWT에서 추출한 정보 포함)
      * @return 삭제 대기 중인 회원 목록 (HTTP 200 OK)
      */
+    @Operation(summary = "삭제 대기 회원 조회", description = "삭제 대기 상태인 회원 목록 조회")
+    @ApiResponse(responseCode = "200", description = "조회 성공")
     @GetMapping("/deleted")
     public ResponseEntity<java.util.Map<String, Object>> getDeletedMembers(
             @RequestParam String businessPlaceId,
@@ -500,6 +544,12 @@ public class MemberController {
      * @param businessPlaceId 사업장 ID
      * @return 복원된 회원 정보 (HTTP 200 OK)
      */
+    @Operation(summary = "회원 복원", description = "삭제 대기 회원 복원 (MANAGER 이상)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "복원 성공"),
+            @ApiResponse(responseCode = "403", description = "복원 권한 없음"),
+            @ApiResponse(responseCode = "404", description = "회원 없음")
+    })
     @PostMapping("/{id}/restore")
     public ResponseEntity<Member> restoreMember(
             @PathVariable String id,
@@ -535,6 +585,12 @@ public class MemberController {
      * @param businessPlaceId 사업장 ID
      * @return 응답 본문 없음 (HTTP 204 No Content)
      */
+    @Operation(summary = "회원 영구 삭제", description = "삭제 대기 회원 영구 삭제 (MANAGER 이상)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "삭제 성공"),
+            @ApiResponse(responseCode = "403", description = "삭제 권한 없음"),
+            @ApiResponse(responseCode = "404", description = "회원 없음")
+    })
     @DeleteMapping("/{id}/permanent")
     public ResponseEntity<Void> permanentDeleteMember(
             @PathVariable String id,

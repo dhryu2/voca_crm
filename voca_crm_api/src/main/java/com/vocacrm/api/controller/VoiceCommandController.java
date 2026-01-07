@@ -3,6 +3,11 @@ package com.vocacrm.api.controller;
 import com.vocacrm.api.dto.VoiceCommandRequest;
 import com.vocacrm.api.dto.VoiceCommandResponse;
 import com.vocacrm.api.service.VoiceCommandService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/voice")
 @RequiredArgsConstructor
+@Tag(name = "음성 명령", description = "음성 명령 처리 및 AI 분석 API")
 public class VoiceCommandController {
 
     private final VoiceCommandService voiceCommandService;
@@ -33,9 +39,14 @@ public class VoiceCommandController {
      * Note: 이 엔드포인트는 AI 분석 + DeepL 번역을 사용하므로 보수적인 rate limiting 적용
      *       대화 이어가기는 /continue 엔드포인트 사용
      */
+    @Operation(summary = "음성 명령 처리", description = "새 음성 명령 AI 분석 (DeepL 번역 + AI 분석)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "처리 성공"),
+            @ApiResponse(responseCode = "400", description = "잘못된 요청")
+    })
     @PostMapping("/command")
     public ResponseEntity<VoiceCommandResponse> processVoiceCommand(
-            @RequestBody VoiceCommandRequest request,
+            @Valid @RequestBody VoiceCommandRequest request,
             jakarta.servlet.http.HttpServletRequest servletRequest) {
         try {
             // context가 있으면 잘못된 엔드포인트 사용 - /continue 사용 안내
@@ -81,9 +92,14 @@ public class VoiceCommandController {
      * Note: 이 엔드포인트는 AI 분석 없이 사용자 선택/확인만 처리
      *       context 필수
      */
+    @Operation(summary = "대화 이어가기", description = "기존 대화 컨텍스트로 선택/확인 처리 (AI 분석 없음)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "처리 성공"),
+            @ApiResponse(responseCode = "400", description = "컨텍스트 누락")
+    })
     @PostMapping("/continue")
     public ResponseEntity<VoiceCommandResponse> continueConversation(
-            @RequestBody VoiceCommandRequest request,
+            @Valid @RequestBody VoiceCommandRequest request,
             jakarta.servlet.http.HttpServletRequest servletRequest) {
         try {
             // context가 없으면 에러 반환
@@ -119,6 +135,8 @@ public class VoiceCommandController {
     /**
      * 헬스체크 엔드포인트
      */
+    @Operation(summary = "헬스체크", description = "음성 명령 서비스 상태 확인")
+    @ApiResponse(responseCode = "200", description = "정상")
     @GetMapping("/health")
     public ResponseEntity<String> healthCheck() {
         return ResponseEntity.ok("Voice command service is running");
@@ -135,6 +153,8 @@ public class VoiceCommandController {
      *
      * Note: businessPlaceId가 없으면 사용자의 기본 사업장 사용
      */
+    @Operation(summary = "일일 브리핑", description = "오늘의 예약/일정 브리핑 조회")
+    @ApiResponse(responseCode = "200", description = "브리핑 생성 성공")
     @GetMapping("/daily-briefing")
     public ResponseEntity<VoiceCommandResponse> getDailyBriefing(
             @RequestParam(required = false) String businessPlaceId,

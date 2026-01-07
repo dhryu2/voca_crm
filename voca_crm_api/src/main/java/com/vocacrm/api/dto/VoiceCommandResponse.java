@@ -55,7 +55,7 @@ public class VoiceCommandResponse {
     /**
      * 다음 대화를 위한 컨텍스트
      */
-    private ConversationContextDto context;
+    private ConversationContextDTO context;
 
     /**
      * 오류 코드 (error 상태일 때)

@@ -1,5 +1,9 @@
 package com.vocacrm.api.service;
 
+import com.vocacrm.api.exception.AccessDeniedException;
+import com.vocacrm.api.exception.BusinessException;
+import com.vocacrm.api.exception.InvalidInputException;
+import com.vocacrm.api.exception.ResourceNotFoundException;
 import com.vocacrm.api.model.AccessStatus;
 import com.vocacrm.api.model.Member;
 import com.vocacrm.api.model.Memo;
@@ -40,22 +44,32 @@ public class MemberService {
 
     /**
      * 페이지네이션 없는 전체 회원 조회 (삭제되지 않은 회원만)
+     * limit 최대값: 1000 (성능 보호)
      */
     public List<Member> getAllMembers(int skip, int limit) {
-        // 기존 호환성을 위해 유지하지만, soft delete 적용 시 수정 필요
-        return memberRepository.findAll().stream()
-                .filter(m -> !Boolean.TRUE.equals(m.getIsDeleted()))
-                .skip(skip)
-                .limit(limit)
-                .toList();
+        // 최대 limit 강제 적용 (성능 보호 및 메모리 과부하 방지)
+        final int MAX_LIMIT = 1000;
+        int effectiveLimit = Math.min(limit, MAX_LIMIT);
+
+        if (limit > MAX_LIMIT) {
+            log.warn("getAllMembers: 요청된 limit({})이 최대값({})을 초과하여 제한됨", limit, MAX_LIMIT);
+        }
+
+        // N+1 방지: Pageable을 사용하여 DB 레벨에서 필터링
+        Pageable pageable = org.springframework.data.domain.PageRequest.of(
+                skip / Math.max(effectiveLimit, 1),
+                effectiveLimit
+        );
+
+        return memberRepository.findByIsDeletedFalse(pageable).getContent();
     }
 
     public Member getMemberById(String id) {
         Member member = memberRepository.findById(UUID.fromString(id))
-                .orElseThrow(() -> new RuntimeException("Member not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("회원을 찾을 수 없습니다: " + id));
         // 삭제된 회원은 조회 불가 (단, 관리용으로 조회할 때는 별도 메서드 사용)
         if (Boolean.TRUE.equals(member.getIsDeleted())) {
-            throw new RuntimeException("삭제된 회원입니다: " + id);
+            throw new ResourceNotFoundException("삭제된 회원입니다: " + id);
         }
         return member;
     }
@@ -74,7 +88,7 @@ public class MemberService {
                 );
 
         if (!hasAccess) {
-            throw new RuntimeException("해당 회원에 대한 접근 권한이 없습니다.");
+            throw new AccessDeniedException("해당 회원에 대한 접근 권한이 없습니다.");
         }
 
         return member;
@@ -109,7 +123,7 @@ public class MemberService {
                 .existsByUserIdAndBusinessPlaceIdAndStatus(UUID.fromString(userId), businessPlaceId, AccessStatus.APPROVED);
 
         if (!hasAccess) {
-            throw new RuntimeException("해당 사업장에 대한 접근 권한이 없습니다.");
+            throw new AccessDeniedException("해당 사업장에 대한 접근 권한이 없습니다.");
         }
 
         return getMembersByBusinessPlace(businessPlaceId);
@@ -120,7 +134,7 @@ public class MemberService {
      */
     public Member getMemberByIdIncludeDeleted(String id) {
         return memberRepository.findById(UUID.fromString(id))
-                .orElseThrow(() -> new RuntimeException("Member not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("회원을 찾을 수 없습니다: " + id));
     }
 
     /**
@@ -184,10 +198,10 @@ public class MemberService {
         UserBusinessPlace owner = owners.stream()
                 .filter(ubp -> ubp.getRole() == Role.OWNER)
                 .findFirst()
-                .orElseThrow(() -> new RuntimeException("Business place owner not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("사업장 소유자를 찾을 수 없습니다."));
 
         User ownerUser = userRepository.findById(owner.getUserId())
-                .orElseThrow(() -> new RuntimeException("Owner user not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("소유자 사용자를 찾을 수 없습니다."));
 
         // Check member limit based on tier
         // Race Condition 방지: SERIALIZABLE 격리 수준 + 비관적 잠금으로 동시성 제어
@@ -195,7 +209,7 @@ public class MemberService {
         long currentCount = memberRepository.countByBusinessPlaceIdWithLock(member.getBusinessPlaceId());
 
         if (currentCount >= maxMembers) {
-            throw new RuntimeException("MEMBER_LIMIT_EXCEEDED:" + maxMembers);
+            throw new BusinessException("회원 수가 최대 " + maxMembers + "명을 초과했습니다.", "MEMBER_LIMIT_EXCEEDED");
         }
 
         return memberRepository.save(member);
@@ -284,7 +298,7 @@ public class MemberService {
         Member member = getMemberByIdIncludeDeleted(id);
 
         if (Boolean.TRUE.equals(member.getIsDeleted())) {
-            throw new RuntimeException("이미 삭제 대기 중인 회원입니다.");
+            throw new InvalidInputException("이미 삭제 대기 중인 회원입니다.");
         }
 
         // 삭제 권한 체크 (Ownership 기반)
@@ -362,7 +376,7 @@ public class MemberService {
         boolean hasAccess = userBusinessPlaceRepository
                 .existsByUserIdAndBusinessPlaceIdAndStatus(UUID.fromString(userId), businessPlaceId, AccessStatus.APPROVED);
         if (!hasAccess) {
-            throw new RuntimeException("해당 사업장에 대한 접근 권한이 없습니다.");
+            throw new AccessDeniedException("해당 사업장에 대한 접근 권한이 없습니다.");
         }
 
         return memberRepository.findByBusinessPlaceIdAndIsDeletedTrueOrderByDeletedAtDesc(businessPlaceId);
@@ -387,7 +401,7 @@ public class MemberService {
         boolean hasAccess = userBusinessPlaceRepository
                 .existsByUserIdAndBusinessPlaceIdAndStatus(UUID.fromString(userId), businessPlaceId, AccessStatus.APPROVED);
         if (!hasAccess) {
-            throw new RuntimeException("해당 사업장에 대한 접근 권한이 없습니다.");
+            throw new AccessDeniedException("해당 사업장에 대한 접근 권한이 없습니다.");
         }
 
         return memberRepository.countByBusinessPlaceIdAndIsDeletedTrue(businessPlaceId);
@@ -402,7 +416,7 @@ public class MemberService {
         Member member = getMemberByIdIncludeDeleted(id);
 
         if (!Boolean.TRUE.equals(member.getIsDeleted())) {
-            throw new RuntimeException("삭제 대기 상태가 아닌 회원입니다.");
+            throw new InvalidInputException("삭제 대기 상태가 아닌 회원입니다.");
         }
 
         // MANAGER 이상만 복원 가능
@@ -438,7 +452,7 @@ public class MemberService {
         Member member = getMemberByIdIncludeDeleted(id);
 
         if (!Boolean.TRUE.equals(member.getIsDeleted())) {
-            throw new RuntimeException("삭제 대기 상태인 회원만 영구 삭제할 수 있습니다.");
+            throw new InvalidInputException("삭제 대기 상태인 회원만 영구 삭제할 수 있습니다.");
         }
 
         // MANAGER 이상만 영구 삭제 가능
@@ -454,11 +468,11 @@ public class MemberService {
     private void checkManagerOrAbove(String requestUserId, String businessPlaceId, String action) {
         UserBusinessPlace requestUserRole = userBusinessPlaceRepository
                 .findByUserIdAndBusinessPlaceIdAndStatus(UUID.fromString(requestUserId), businessPlaceId, AccessStatus.APPROVED)
-                .orElseThrow(() -> new RuntimeException("해당 사업장에 대한 접근 권한이 없습니다."));
+                .orElseThrow(() -> new AccessDeniedException("해당 사업장에 대한 접근 권한이 없습니다."));
 
         Role role = requestUserRole.getRole();
         if (role != Role.OWNER && role != Role.MANAGER) {
-            throw new RuntimeException(action + " 권한이 없습니다. MANAGER 이상만 가능합니다.");
+            throw new AccessDeniedException(action + " 권한이 없습니다. MANAGER 이상만 가능합니다.");
         }
     }
 
@@ -480,7 +494,7 @@ public class MemberService {
         // 요청자의 role 조회
         UserBusinessPlace requestUserRole = userBusinessPlaceRepository
                 .findByUserIdAndBusinessPlaceIdAndStatus(UUID.fromString(requestUserId), businessPlaceId, AccessStatus.APPROVED)
-                .orElseThrow(() -> new RuntimeException("해당 사업장에 대한 접근 권한이 없습니다."));
+                .orElseThrow(() -> new AccessDeniedException("해당 사업장에 대한 접근 권한이 없습니다."));
 
         Role requesterRole = requestUserRole.getRole();
 
@@ -515,7 +529,7 @@ public class MemberService {
         if (requesterRole == Role.MANAGER) {
             // OWNER 소유 데이터는 수정 불가
             if (ownerRoleType == Role.OWNER) {
-                throw new RuntimeException("OWNER가 소유한 데이터는 수정할 수 없습니다.");
+                throw new AccessDeniedException("OWNER가 소유한 데이터는 수정할 수 없습니다.");
             }
             // MANAGER, STAFF 소유 데이터는 수정 가능 (같은 Role + 하위 Role)
             return;
@@ -525,13 +539,13 @@ public class MemberService {
         if (requesterRole == Role.STAFF) {
             // OWNER, MANAGER 소유 데이터는 수정 불가
             if (ownerRoleType == Role.OWNER || ownerRoleType == Role.MANAGER) {
-                throw new RuntimeException("상위 권한 사용자가 소유한 데이터는 수정할 수 없습니다.");
+                throw new AccessDeniedException("상위 권한 사용자가 소유한 데이터는 수정할 수 없습니다.");
             }
             // 같은 STAFF 소유 데이터는 수정 가능 (협업 허용)
             return;
         }
 
-        throw new RuntimeException("수정 권한이 없습니다.");
+        throw new AccessDeniedException("수정 권한이 없습니다.");
     }
 
     /**
@@ -550,7 +564,7 @@ public class MemberService {
         // 요청자의 role 조회
         UserBusinessPlace requestUserRole = userBusinessPlaceRepository
                 .findByUserIdAndBusinessPlaceIdAndStatus(UUID.fromString(requestUserId), businessPlaceId, AccessStatus.APPROVED)
-                .orElseThrow(() -> new RuntimeException("해당 사업장에 대한 접근 권한이 없습니다."));
+                .orElseThrow(() -> new AccessDeniedException("해당 사업장에 대한 접근 권한이 없습니다."));
 
         Role requesterRole = requestUserRole.getRole();
 
@@ -585,11 +599,11 @@ public class MemberService {
         if (requesterRole == Role.MANAGER) {
             // OWNER 소유 데이터는 삭제 불가
             if (ownerRoleType == Role.OWNER) {
-                throw new RuntimeException("OWNER가 소유한 데이터는 삭제할 수 없습니다.");
+                throw new AccessDeniedException("OWNER가 소유한 데이터는 삭제할 수 없습니다.");
             }
             // 다른 MANAGER 소유 데이터는 삭제 불가 (같은 Role 보호)
             if (ownerRoleType == Role.MANAGER) {
-                throw new RuntimeException("다른 관리자가 소유한 데이터는 삭제할 수 없습니다.");
+                throw new AccessDeniedException("다른 관리자가 소유한 데이터는 삭제할 수 없습니다.");
             }
             // STAFF 소유 데이터는 삭제 가능 (하위 Role)
             return;
@@ -598,9 +612,9 @@ public class MemberService {
         // 6. 요청자가 STAFF인 경우
         if (requesterRole == Role.STAFF) {
             // 다른 사람 소유 데이터는 모두 삭제 불가
-            throw new RuntimeException("본인이 소유한 데이터만 삭제할 수 있습니다.");
+            throw new AccessDeniedException("본인이 소유한 데이터만 삭제할 수 있습니다.");
         }
 
-        throw new RuntimeException("삭제 권한이 없습니다.");
+        throw new AccessDeniedException("삭제 권한이 없습니다.");
     }
 }

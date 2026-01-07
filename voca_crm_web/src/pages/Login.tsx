@@ -1,29 +1,35 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui';
 import { Mic, ArrowLeft } from 'lucide-react';
+import type { OAuthProvider } from '@/lib/oauth';
 
 export function LoginPage() {
-  const { isLoading } = useAuthStore();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { loginWithProvider, isLoading } = useAuthStore();
   const [error, setError] = useState<string | null>(null);
 
-  const handleSocialLogin = async (provider: 'google' | 'kakao' | 'apple') => {
+  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboard';
+
+  const handleSocialLogin = async (provider: OAuthProvider) => {
     setError(null);
 
     try {
-      // 실제 구현에서는 각 provider의 OAuth 플로우를 실행
-      // 여기서는 데모용으로 가상의 토큰을 사용
-      // TODO: 실제 OAuth 통합
-
-      // 데모: 테스트용 로그인 시뮬레이션
-      alert(`${provider} 로그인은 모바일 앱에서 지원됩니다. 웹 버전은 준비 중입니다.`);
-
-      // 개발 환경에서 테스트용 - 실제 배포 시 제거
-      // await login(provider, 'demo-token');
-      // navigate(from, { replace: true });
+      await loginWithProvider(provider);
+      navigate(from, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : '로그인에 실패했습니다.');
+      if (err instanceof Error) {
+        if (err.message === 'SIGNUP_REQUIRED') {
+          // 회원가입이 필요한 경우 - 회원가입 페이지로 이동
+          navigate('/signup', { state: { provider, from } });
+          return;
+        }
+        setError(err.message);
+      } else {
+        setError('로그인에 실패했습니다.');
+      }
     }
   };
 

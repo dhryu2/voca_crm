@@ -84,7 +84,7 @@ public class VoiceCommandService {
         }
 
         // 컨텍스트 생성 (requestUserId 포함)
-        ConversationContextDto context = ConversationContextDto.builder()
+        ConversationContextDTO context = ConversationContextDTO.builder()
                 .conversationId(UUID.randomUUID().toString())
                 .businessPlaceId(businessPlaceId)
                 .requestUserId(request.getUserId())
@@ -97,7 +97,7 @@ public class VoiceCommandService {
     /**
      * 카테고리별 라우팅
      */
-    private VoiceCommandResponse routeByCategory(AiAnalysisResult aiResult, ConversationContextDto context) {
+    private VoiceCommandResponse routeByCategory(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String category = aiResult.getCategory();
 
         if (category == null) {
@@ -132,7 +132,7 @@ public class VoiceCommandService {
 
     // ===== MEMBER 카테고리 처리 =====
 
-    private VoiceCommandResponse handleMemberCategory(AiAnalysisResult aiResult, ConversationContextDto context) {
+    private VoiceCommandResponse handleMemberCategory(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String action = aiResult.getAction();
 
         if (action == null) {
@@ -149,7 +149,7 @@ public class VoiceCommandService {
         };
     }
 
-    private VoiceCommandResponse handleMemberSearch(AiAnalysisResult aiResult, ConversationContextDto context) {
+    private VoiceCommandResponse handleMemberSearch(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String specificMemberId = getSelectedMemberId(context);
         List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId());
 
@@ -168,7 +168,7 @@ public class VoiceCommandService {
                 Map.of("member", member));
     }
 
-    private VoiceCommandResponse handleMemberCreate(AiAnalysisResult aiResult, ConversationContextDto context) {
+    private VoiceCommandResponse handleMemberCreate(AiAnalysisResult aiResult, ConversationContextDTO context) {
         Map<String, Object> memberData = aiResult.getMemberData();
 
         if (memberData == null || memberData.get("name") == null) {
@@ -197,7 +197,7 @@ public class VoiceCommandService {
         }
     }
 
-    private VoiceCommandResponse handleMemberUpdate(AiAnalysisResult aiResult, ConversationContextDto context) {
+    private VoiceCommandResponse handleMemberUpdate(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String specificMemberId = getSelectedMemberId(context);
         List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId());
 
@@ -245,7 +245,7 @@ public class VoiceCommandService {
         }
     }
 
-    private VoiceCommandResponse handleMemberDelete(AiAnalysisResult aiResult, ConversationContextDto context) {
+    private VoiceCommandResponse handleMemberDelete(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String specificMemberId = getSelectedMemberId(context);
         List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId());
 
@@ -283,7 +283,7 @@ public class VoiceCommandService {
         }
     }
 
-    private VoiceCommandResponse handleMemberGetAll(AiAnalysisResult aiResult, ConversationContextDto context) {
+    private VoiceCommandResponse handleMemberGetAll(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String businessPlaceId = context.getBusinessPlaceId();
         List<Member> members;
 
@@ -304,7 +304,7 @@ public class VoiceCommandService {
 
     // ===== MEMO 카테고리 처리 =====
 
-    private VoiceCommandResponse handleMemoCategory(AiAnalysisResult aiResult, ConversationContextDto context) {
+    private VoiceCommandResponse handleMemoCategory(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String action = aiResult.getAction();
 
         if (action == null) {
@@ -322,7 +322,7 @@ public class VoiceCommandService {
         };
     }
 
-    private VoiceCommandResponse handleMemoGetByMember(AiAnalysisResult aiResult, ConversationContextDto context) {
+    private VoiceCommandResponse handleMemoGetByMember(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String specificMemberId = getSelectedMemberId(context);
         List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId());
 
@@ -346,7 +346,7 @@ public class VoiceCommandService {
                 Map.of("member", member, "memos", memos));
     }
 
-    private VoiceCommandResponse handleMemoGetLatest(AiAnalysisResult aiResult, ConversationContextDto context) {
+    private VoiceCommandResponse handleMemoGetLatest(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String specificMemberId = getSelectedMemberId(context);
         List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId());
 
@@ -369,7 +369,7 @@ public class VoiceCommandService {
         }
     }
 
-    private VoiceCommandResponse handleMemoCreate(AiAnalysisResult aiResult, ConversationContextDto context) {
+    private VoiceCommandResponse handleMemoCreate(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String specificMemberId = getSelectedMemberId(context);
         List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId());
 
@@ -395,7 +395,7 @@ public class VoiceCommandService {
                 Map.of("member", member, "memo", memo));
     }
 
-    private VoiceCommandResponse handleMemoUpdateLatest(AiAnalysisResult aiResult, ConversationContextDto context) {
+    private VoiceCommandResponse handleMemoUpdateLatest(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String specificMemberId = getSelectedMemberId(context);
         List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId());
 
@@ -438,7 +438,7 @@ public class VoiceCommandService {
         }
     }
 
-    private VoiceCommandResponse handleMemoDeleteLatest(AiAnalysisResult aiResult, ConversationContextDto context) {
+    private VoiceCommandResponse handleMemoDeleteLatest(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String specificMemberId = getSelectedMemberId(context);
         List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId());
 
@@ -474,7 +474,7 @@ public class VoiceCommandService {
         }
     }
 
-    private VoiceCommandResponse handleMemoDeleteAll(AiAnalysisResult aiResult, ConversationContextDto context) {
+    private VoiceCommandResponse handleMemoDeleteAll(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String specificMemberId = getSelectedMemberId(context);
         List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId());
 
@@ -529,7 +529,7 @@ public class VoiceCommandService {
 
     // ===== VISIT 카테고리 처리 =====
 
-    private VoiceCommandResponse handleVisitCategory(AiAnalysisResult aiResult, ConversationContextDto context) {
+    private VoiceCommandResponse handleVisitCategory(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String action = aiResult.getAction();
 
         if (action == null) {
@@ -543,7 +543,7 @@ public class VoiceCommandService {
         };
     }
 
-    private VoiceCommandResponse handleVisitCheckin(AiAnalysisResult aiResult, ConversationContextDto context) {
+    private VoiceCommandResponse handleVisitCheckin(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String specificMemberId = getSelectedMemberId(context);
         List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId());
 
@@ -575,7 +575,7 @@ public class VoiceCommandService {
                 Map.of("member", member, "memo", memo, "checkinTime", now.toString()));
     }
 
-    private VoiceCommandResponse handleVisitGetByMember(AiAnalysisResult aiResult, ConversationContextDto context) {
+    private VoiceCommandResponse handleVisitGetByMember(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String specificMemberId = getSelectedMemberId(context);
         List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId());
 
@@ -605,7 +605,7 @@ public class VoiceCommandService {
 
     // ===== STATISTICS 카테고리 처리 =====
 
-    private VoiceCommandResponse handleStatisticsCategory(AiAnalysisResult aiResult, ConversationContextDto context) {
+    private VoiceCommandResponse handleStatisticsCategory(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String action = aiResult.getAction();
 
         if (action == null) {
@@ -619,7 +619,7 @@ public class VoiceCommandService {
         };
     }
 
-    private VoiceCommandResponse handleStatisticsGetHome(ConversationContextDto context) {
+    private VoiceCommandResponse handleStatisticsGetHome(ConversationContextDTO context) {
         String businessPlaceId = context.getBusinessPlaceId();
 
         if (businessPlaceId == null) {
@@ -639,7 +639,7 @@ public class VoiceCommandService {
         }
     }
 
-    private VoiceCommandResponse handleStatisticsGetRecentActivities(AiAnalysisResult aiResult, ConversationContextDto context) {
+    private VoiceCommandResponse handleStatisticsGetRecentActivities(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String businessPlaceId = context.getBusinessPlaceId();
 
         if (businessPlaceId == null) {
@@ -689,7 +689,7 @@ public class VoiceCommandService {
     // ===== 대화 이어서 처리 =====
 
     private VoiceCommandResponse processContinuedConversationInternal(VoiceCommandRequest request, String businessPlaceId) {
-        ConversationContextDto context = request.getContext();
+        ConversationContextDTO context = request.getContext();
         ConversationStep currentStep = context.getCurrentStep();
 
         if (context.getBusinessPlaceId() == null && businessPlaceId != null) {
@@ -704,7 +704,7 @@ public class VoiceCommandService {
         };
     }
 
-    private VoiceCommandResponse handleMemberSelection(VoiceCommandRequest request, ConversationContextDto context) {
+    private VoiceCommandResponse handleMemberSelection(VoiceCommandRequest request, ConversationContextDTO context) {
         List<String> selectedIds = extractSelectedIds(request.getText(), context);
 
         if (selectedIds.isEmpty()) {
@@ -727,7 +727,7 @@ public class VoiceCommandService {
         return executeWithOriginalIntent(originalIntent, context);
     }
 
-    private VoiceCommandResponse handleMemoSelection(VoiceCommandRequest request, ConversationContextDto context) {
+    private VoiceCommandResponse handleMemoSelection(VoiceCommandRequest request, ConversationContextDTO context) {
         String text = request.getText().toLowerCase();
         boolean selectAll = text.contains("전체") || text.contains("모두") || text.contains("다");
 
@@ -760,7 +760,7 @@ public class VoiceCommandService {
         return executeWithOriginalIntent(originalIntent, context);
     }
 
-    private VoiceCommandResponse handleConfirmation(VoiceCommandRequest request, ConversationContextDto context) {
+    private VoiceCommandResponse handleConfirmation(VoiceCommandRequest request, ConversationContextDTO context) {
         String text = request.getText().toLowerCase();
 
         boolean confirmed = text.contains("예") || text.contains("네") ||
@@ -776,7 +776,7 @@ public class VoiceCommandService {
         return executeWithOriginalIntent(originalIntent, context);
     }
 
-    private VoiceCommandResponse executeWithOriginalIntent(Map<String, Object> originalIntent, ConversationContextDto context) {
+    private VoiceCommandResponse executeWithOriginalIntent(Map<String, Object> originalIntent, ConversationContextDTO context) {
         if (originalIntent == null) {
             return createErrorResponse("원래 명령 정보를 찾을 수 없습니다.", "MISSING_INTENT");
         }
@@ -833,7 +833,7 @@ public class VoiceCommandService {
         return memberService.searchMembers(null, name, phone, email, businessPlaceId);
     }
 
-    private String getSelectedMemberId(ConversationContextDto context) {
+    private String getSelectedMemberId(ConversationContextDTO context) {
         if (context == null) return null;
 
         SelectedEntity memberEntity = context.getSelectedEntityByType("member");
@@ -844,7 +844,7 @@ public class VoiceCommandService {
         return null;
     }
 
-    private List<String> extractSelectedIds(String text, ConversationContextDto context) {
+    private List<String> extractSelectedIds(String text, ConversationContextDTO context) {
         // UUID 형식이면 직접 반환
         if (text.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")) {
             return Collections.singletonList(text);
@@ -868,7 +868,7 @@ public class VoiceCommandService {
                 .collect(Collectors.toList());
     }
 
-    private VoiceCommandResponse createMemberSelectionResponse(List<Member> members, AiAnalysisResult aiResult, ConversationContextDto existingContext) {
+    private VoiceCommandResponse createMemberSelectionResponse(List<Member> members, AiAnalysisResult aiResult, ConversationContextDTO existingContext) {
         String conversationId = UUID.randomUUID().toString();
 
         List<Map<String, Object>> candidates = members.stream()
@@ -899,7 +899,7 @@ public class VoiceCommandService {
         Map<String, Object> additionalData = new HashMap<>();
         additionalData.put("candidates", candidates);
 
-        ConversationContextDto context = ConversationContextDto.builder()
+        ConversationContextDTO context = ConversationContextDTO.builder()
                 .conversationId(conversationId)
                 .businessPlaceId(existingContext != null ? existingContext.getBusinessPlaceId() : null)
                 .requestUserId(existingContext != null ? existingContext.getRequestUserId() : null)
@@ -942,7 +942,7 @@ public class VoiceCommandService {
         return String.join(" ", keywords);
     }
 
-    private VoiceCommandResponse createConfirmationResponse(Member member, String action, ConversationContextDto existingContext) {
+    private VoiceCommandResponse createConfirmationResponse(Member member, String action, ConversationContextDTO existingContext) {
         String conversationId = UUID.randomUUID().toString();
 
         Map<String, Object> originalIntent = new HashMap<>();
@@ -966,7 +966,7 @@ public class VoiceCommandService {
                 .selectAll(false)
                 .build();
 
-        ConversationContextDto context = ConversationContextDto.builder()
+        ConversationContextDTO context = ConversationContextDTO.builder()
                 .conversationId(conversationId)
                 .businessPlaceId(existingContext != null ? existingContext.getBusinessPlaceId() : null)
                 .requestUserId(existingContext != null ? existingContext.getRequestUserId() : null)

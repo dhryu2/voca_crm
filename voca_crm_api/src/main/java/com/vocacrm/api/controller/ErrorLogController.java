@@ -161,7 +161,7 @@ public class ErrorLogController {
     @PatchMapping("/{id}/resolve")
     public ResponseEntity<ErrorLog> resolveError(
             @PathVariable String id,
-            @RequestBody ResolveRequest request,
+            @Valid @RequestBody ResolveRequest request,
             HttpServletRequest servletRequest) {
         String resolvedBy = (String) servletRequest.getAttribute("userId");
         return ResponseEntity.ok(

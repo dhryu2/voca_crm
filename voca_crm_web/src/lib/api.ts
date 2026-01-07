@@ -1,7 +1,7 @@
 import type { Tokens } from '@/types';
 
 const API_BASE_URL = import.meta.env.PROD
-  ? 'https://voca-api.dhryu.dev'
+  ? import.meta.env.VITE_API_BASE_URL
   : '/api';
 
 class ApiClient {

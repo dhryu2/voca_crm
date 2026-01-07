@@ -125,6 +125,12 @@ public interface MemberRepository extends JpaRepository<Member, UUID> {
     List<Member> findByBusinessPlaceIdAndIsDeletedFalse(String businessPlaceId);
 
     /**
+     * 삭제되지 않은 회원 목록 조회 (페이징)
+     * N+1 문제 방지를 위한 DB 레벨 필터링
+     */
+    Page<Member> findByIsDeletedFalse(Pageable pageable);
+
+    /**
      * 삭제되지 않은 회원 수 조회 (사업장별)
      */
     long countByBusinessPlaceIdAndIsDeletedFalse(String businessPlaceId);

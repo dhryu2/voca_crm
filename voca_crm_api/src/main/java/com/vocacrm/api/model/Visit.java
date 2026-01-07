@@ -31,6 +31,7 @@ public class Visit {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "member_id", insertable = false, updatable = false)
     @ToString.Exclude
+    @JsonIgnore
     private Member member;
 
     @Column(name = "visitor_id")
