@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User, BusinessPlaceWithRole } from '@/types';
-import { apiClient } from '@/lib/api';
+import { apiClient, ApiError } from '@/lib/api';
+import { oauthLogin, type OAuthProvider } from '@/lib/oauth';
 
 interface AuthState {
   user: User | null;
@@ -14,11 +15,19 @@ interface AuthState {
   setUser: (user: User | null) => void;
   setBusinessPlaces: (places: BusinessPlaceWithRole[]) => void;
   setCurrentBusinessPlace: (place: BusinessPlaceWithRole | null) => void;
+  loginWithProvider: (provider: OAuthProvider) => Promise<User>;
   login: (provider: string, token: string) => Promise<User>;
+  signupWithProvider: (provider: OAuthProvider, params: SignupUserParams) => Promise<User>;
   signup: (params: SignupParams) => Promise<User>;
   logout: () => void;
   loadUserFromToken: () => Promise<void>;
   fetchBusinessPlaces: () => Promise<void>;
+}
+
+interface SignupUserParams {
+  username: string;
+  phone: string;
+  email?: string;
 }
 
 interface SignupParams {
@@ -80,6 +89,46 @@ export const useAuthStore = create<AuthState>()(
 
       setCurrentBusinessPlace: (place) => set({ currentBusinessPlace: place }),
 
+      // OAuth provider를 사용한 로그인
+      loginWithProvider: async (provider) => {
+        set({ isLoading: true });
+        try {
+          // OAuth 인증
+          const oauthResult = await oauthLogin(provider);
+
+          // 백엔드 API 호출
+          const result = await apiClient.post<{ accessToken: string; refreshToken: string }>('/auth/login', {
+            provider: oauthResult.provider,
+            token: oauthResult.token,
+          });
+
+          apiClient.saveTokens({
+            accessToken: result.accessToken,
+            refreshToken: result.refreshToken,
+          });
+
+          const user = parseJwt(result.accessToken);
+          if (!user) throw new Error('토큰 파싱 실패');
+
+          set({ user, isAuthenticated: true, isLoading: false });
+
+          // 사업장 목록 로드
+          await get().fetchBusinessPlaces();
+
+          return user;
+        } catch (error) {
+          set({ isLoading: false });
+          // USER_NOT_FOUND 에러는 회원가입이 필요함을 의미
+          if (error instanceof ApiError && error.status === 404) {
+            const errorData = error.data as { error?: string };
+            if (errorData?.error === 'USER_NOT_FOUND') {
+              throw new Error('SIGNUP_REQUIRED');
+            }
+          }
+          throw error;
+        }
+      },
+
       login: async (provider, token) => {
         set({ isLoading: true });
         try {
@@ -100,6 +149,39 @@ export const useAuthStore = create<AuthState>()(
 
           // 사업장 목록 로드
           await get().fetchBusinessPlaces();
+
+          return user;
+        } catch (error) {
+          set({ isLoading: false });
+          throw error;
+        }
+      },
+
+      // OAuth provider를 사용한 회원가입
+      signupWithProvider: async (provider, params) => {
+        set({ isLoading: true });
+        try {
+          // OAuth 인증
+          const oauthResult = await oauthLogin(provider);
+
+          // 백엔드 API 호출
+          const result = await apiClient.post<{ accessToken: string; refreshToken: string }>('/auth/signup', {
+            provider: oauthResult.provider,
+            token: oauthResult.token,
+            username: params.username,
+            phone: params.phone,
+            email: params.email,
+          });
+
+          apiClient.saveTokens({
+            accessToken: result.accessToken,
+            refreshToken: result.refreshToken,
+          });
+
+          const user = parseJwt(result.accessToken);
+          if (!user) throw new Error('토큰 파싱 실패');
+
+          set({ user, isAuthenticated: true, isLoading: false });
 
           return user;
         } catch (error) {

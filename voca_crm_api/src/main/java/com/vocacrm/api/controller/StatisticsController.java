@@ -4,6 +4,7 @@ import com.vocacrm.api.dto.ChartDataDTO;
 import com.vocacrm.api.dto.HomeStatisticsDTO;
 import com.vocacrm.api.dto.RecentActivityDTO;
 import com.vocacrm.api.dto.TodayScheduleDTO;
+import com.vocacrm.api.exception.AccessDeniedException;
 import com.vocacrm.api.model.AccessStatus;
 import com.vocacrm.api.repository.UserBusinessPlaceRepository;
 import com.vocacrm.api.service.StatisticsService;
@@ -31,7 +32,7 @@ public class StatisticsController {
                 .existsByUserIdAndBusinessPlaceIdAndStatus(UUID.fromString(userId), businessPlaceId, AccessStatus.APPROVED);
 
         if (!hasAccess) {
-            throw new RuntimeException("해당 사업장에 대한 접근 권한이 없습니다.");
+            throw new AccessDeniedException("해당 사업장에 대한 접근 권한이 없습니다.");
         }
     }
 

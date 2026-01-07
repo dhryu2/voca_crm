@@ -1,5 +1,9 @@
 package com.vocacrm.api.service;
 
+import com.vocacrm.api.exception.AccessDeniedException;
+import com.vocacrm.api.exception.BusinessException;
+import com.vocacrm.api.exception.InvalidInputException;
+import com.vocacrm.api.exception.ResourceNotFoundException;
 import com.vocacrm.api.model.Member;
 import com.vocacrm.api.model.Memo;
 import com.vocacrm.api.repository.MemberRepository;
@@ -38,18 +42,18 @@ public class MemoService {
      */
     public Memo getMemoById(String id, String businessPlaceId) {
         Memo memo = memoRepository.findById(UUID.fromString(id))
-                .orElseThrow(() -> new RuntimeException("Memo not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("메모를 찾을 수 없습니다: " + id));
 
         if (Boolean.TRUE.equals(memo.getIsDeleted())) {
-            throw new RuntimeException("삭제된 메모입니다: " + id);
+            throw new ResourceNotFoundException("삭제된 메모입니다: " + id);
         }
 
         // 사업장 권한 검증 - Member를 통해 확인
         Member member = memberRepository.findById(memo.getMemberId())
-                .orElseThrow(() -> new RuntimeException("Member not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("회원을 찾을 수 없습니다"));
 
         if (!member.getBusinessPlaceId().equals(businessPlaceId)) {
-            throw new RuntimeException("해당 사업장의 메모가 아닙니다");
+            throw new AccessDeniedException("해당 사업장의 메모가 아닙니다");
         }
 
         return memo;
@@ -60,7 +64,7 @@ public class MemoService {
      */
     public Memo getMemoByIdIncludeDeleted(String id) {
         return memoRepository.findById(UUID.fromString(id))
-                .orElseThrow(() -> new RuntimeException("Memo not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("메모를 찾을 수 없습니다: " + id));
     }
 
     /**
@@ -110,7 +114,7 @@ public class MemoService {
 
         // Check memo limit (삭제되지 않은 메모만 카운트)
         Member member = memberRepository.findById(memo.getMemberId())
-                .orElseThrow(() -> new RuntimeException("Member not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("회원을 찾을 수 없습니다"));
 
         // Get owner of business place to check tier
         if (member.getBusinessPlaceId() != null) {
@@ -131,7 +135,7 @@ public class MemoService {
                             memo.getMemberId(), member.getBusinessPlaceId());
 
                     if (currentCount >= maxMemos) {
-                        throw new RuntimeException("MEMO_LIMIT_EXCEEDED:" + maxMemos);
+                        throw new BusinessException("메모 개수 제한을 초과했습니다. 최대 " + maxMemos + "개까지 등록 가능합니다.", "MEMO_LIMIT_EXCEEDED");
                     }
                 }
             }
@@ -166,7 +170,7 @@ public class MemoService {
     public Memo createMemoWithOldestDeletion(Memo memo) {
         // Get member to check business place
         Member member = memberRepository.findById(memo.getMemberId())
-                .orElseThrow(() -> new RuntimeException("Member not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("회원을 찾을 수 없습니다"));
 
         // Delete oldest memo first (삭제되지 않은 메모 중)
         List<Memo> memos = memoRepository.findByMemberIdAndBusinessPlaceIdAndIsDeletedFalseOrderByCreatedAtDesc(
@@ -254,7 +258,7 @@ public class MemoService {
         Memo memo = getMemoByIdIncludeDeleted(id);
 
         if (Boolean.TRUE.equals(memo.getIsDeleted())) {
-            throw new RuntimeException("이미 삭제 대기 중인 메모입니다.");
+            throw new InvalidInputException("이미 삭제 대기 중인 메모입니다.");
         }
 
         // 삭제 권한 체크 (Ownership 기반)
@@ -314,7 +318,7 @@ public class MemoService {
         boolean hasAccess = userBusinessPlaceRepository
                 .existsByUserIdAndBusinessPlaceIdAndStatus(UUID.fromString(userId), businessPlaceId, AccessStatus.APPROVED);
         if (!hasAccess) {
-            throw new RuntimeException("해당 사업장에 대한 접근 권한이 없습니다.");
+            throw new AccessDeniedException("해당 사업장에 대한 접근 권한이 없습니다.");
         }
 
         return memoRepository.findDeletedMemosByBusinessPlaceId(businessPlaceId);
@@ -330,7 +334,7 @@ public class MemoService {
         Memo memo = getMemoByIdIncludeDeleted(id);
 
         if (!Boolean.TRUE.equals(memo.getIsDeleted())) {
-            throw new RuntimeException("삭제 대기 상태가 아닌 메모입니다.");
+            throw new InvalidInputException("삭제 대기 상태가 아닌 메모입니다.");
         }
 
         // MANAGER 이상만 복원 가능
@@ -338,10 +342,10 @@ public class MemoService {
 
         // 회원 상태 확인 - 회원이 삭제 대기 중이면 메모 복원 불가
         Member member = memberRepository.findById(memo.getMemberId())
-                .orElseThrow(() -> new RuntimeException("회원을 찾을 수 없습니다."));
+                .orElseThrow(() -> new ResourceNotFoundException("회원을 찾을 수 없습니다."));
 
         if (Boolean.TRUE.equals(member.getIsDeleted())) {
-            throw new RuntimeException("삭제 대기 중인 회원의 메모는 복원할 수 없습니다. 먼저 회원을 복원해주세요.");
+            throw new InvalidInputException("삭제 대기 중인 회원의 메모는 복원할 수 없습니다. 먼저 회원을 복원해주세요.");
         }
 
         // 메모 복원
@@ -361,7 +365,7 @@ public class MemoService {
         Memo memo = getMemoByIdIncludeDeleted(id);
 
         if (!Boolean.TRUE.equals(memo.getIsDeleted())) {
-            throw new RuntimeException("삭제 대기 상태인 메모만 영구 삭제할 수 있습니다.");
+            throw new InvalidInputException("삭제 대기 상태인 메모만 영구 삭제할 수 있습니다.");
         }
 
         // MANAGER 이상만 영구 삭제 가능
@@ -376,11 +380,11 @@ public class MemoService {
     private void checkManagerOrAbove(String requestUserId, String businessPlaceId, String action) {
         UserBusinessPlace requestUserRole = userBusinessPlaceRepository
                 .findByUserIdAndBusinessPlaceIdAndStatus(UUID.fromString(requestUserId), businessPlaceId, AccessStatus.APPROVED)
-                .orElseThrow(() -> new RuntimeException("해당 사업장에 대한 접근 권한이 없습니다."));
+                .orElseThrow(() -> new AccessDeniedException("해당 사업장에 대한 접근 권한이 없습니다."));
 
         Role role = requestUserRole.getRole();
         if (role != Role.OWNER && role != Role.MANAGER) {
-            throw new RuntimeException(action + " 권한이 없습니다. MANAGER 이상만 가능합니다.");
+            throw new AccessDeniedException(action + " 권한이 없습니다. MANAGER 이상만 가능합니다.");
         }
     }
 
@@ -402,7 +406,7 @@ public class MemoService {
         // 요청자의 role 조회
         UserBusinessPlace requestUserRole = userBusinessPlaceRepository
                 .findByUserIdAndBusinessPlaceIdAndStatus(UUID.fromString(requestUserId), businessPlaceId, AccessStatus.APPROVED)
-                .orElseThrow(() -> new RuntimeException("해당 사업장에 대한 접근 권한이 없습니다."));
+                .orElseThrow(() -> new AccessDeniedException("해당 사업장에 대한 접근 권한이 없습니다."));
 
         Role requesterRole = requestUserRole.getRole();
 
@@ -437,7 +441,7 @@ public class MemoService {
         if (requesterRole == Role.MANAGER) {
             // OWNER 소유 데이터는 수정 불가
             if (ownerRoleType == Role.OWNER) {
-                throw new RuntimeException("OWNER가 소유한 데이터는 수정할 수 없습니다.");
+                throw new AccessDeniedException("OWNER가 소유한 데이터는 수정할 수 없습니다.");
             }
             // MANAGER, STAFF 소유 데이터는 수정 가능 (같은 Role + 하위 Role)
             return;
@@ -447,13 +451,13 @@ public class MemoService {
         if (requesterRole == Role.STAFF) {
             // OWNER, MANAGER 소유 데이터는 수정 불가
             if (ownerRoleType == Role.OWNER || ownerRoleType == Role.MANAGER) {
-                throw new RuntimeException("상위 권한 사용자가 소유한 데이터는 수정할 수 없습니다.");
+                throw new AccessDeniedException("상위 권한 사용자가 소유한 데이터는 수정할 수 없습니다.");
             }
             // 같은 STAFF 소유 데이터는 수정 가능 (협업 허용)
             return;
         }
 
-        throw new RuntimeException("수정 권한이 없습니다.");
+        throw new AccessDeniedException("수정 권한이 없습니다.");
     }
 
     /**
@@ -472,7 +476,7 @@ public class MemoService {
         // 요청자의 role 조회
         UserBusinessPlace requestUserRole = userBusinessPlaceRepository
                 .findByUserIdAndBusinessPlaceIdAndStatus(UUID.fromString(requestUserId), businessPlaceId, AccessStatus.APPROVED)
-                .orElseThrow(() -> new RuntimeException("해당 사업장에 대한 접근 권한이 없습니다."));
+                .orElseThrow(() -> new AccessDeniedException("해당 사업장에 대한 접근 권한이 없습니다."));
 
         Role requesterRole = requestUserRole.getRole();
 
@@ -507,11 +511,11 @@ public class MemoService {
         if (requesterRole == Role.MANAGER) {
             // OWNER 소유 데이터는 삭제 불가
             if (ownerRoleType == Role.OWNER) {
-                throw new RuntimeException("OWNER가 소유한 데이터는 삭제할 수 없습니다.");
+                throw new AccessDeniedException("OWNER가 소유한 데이터는 삭제할 수 없습니다.");
             }
             // 다른 MANAGER 소유 데이터는 삭제 불가 (같은 Role 보호)
             if (ownerRoleType == Role.MANAGER) {
-                throw new RuntimeException("다른 관리자가 소유한 데이터는 삭제할 수 없습니다.");
+                throw new AccessDeniedException("다른 관리자가 소유한 데이터는 삭제할 수 없습니다.");
             }
             // STAFF 소유 데이터는 삭제 가능 (하위 Role)
             return;
@@ -520,9 +524,9 @@ public class MemoService {
         // 6. 요청자가 STAFF인 경우
         if (requesterRole == Role.STAFF) {
             // 다른 사람 소유 데이터는 모두 삭제 불가
-            throw new RuntimeException("본인이 소유한 데이터만 삭제할 수 있습니다.");
+            throw new AccessDeniedException("본인이 소유한 데이터만 삭제할 수 있습니다.");
         }
 
-        throw new RuntimeException("삭제 권한이 없습니다.");
+        throw new AccessDeniedException("삭제 권한이 없습니다.");
     }
 }

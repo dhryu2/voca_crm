@@ -5,10 +5,12 @@ import 'dart:ui';
 class ThemeColor {
   // ===== Primary Brand Colors =====
   // Modern blue - trustworthy, professional (Salesforce/Trello inspired)
-  static const Color primary = Color(0xFF2563EB);
-  static const Color primaryLight = Color(0xFF3B82F6);
+  static const Color primary = Color(0xFF1C06B1);
+  static const Color primaryLight = Color(0xFF1C06B1);
   static const Color primaryDark = Color(0xFF1D4ED8);
-  static const Color primarySurface = Color(0xFFEFF6FF); // Very light blue for backgrounds
+  static const Color primarySurface = Color(
+    0xFFEFF6FF,
+  ); // Very light blue for backgrounds
 
   // Legacy support
   static const Color primaryPurple = primary;
@@ -55,7 +57,9 @@ class ThemeColor {
   static const Color neutral900 = Color(0xFF111827);
 
   // ===== Background Colors =====
-  static const Color background = Color(0xFFF9FAFB); // Light gray (Notion inspired)
+  static const Color background = Color(
+    0xFFF9FAFB,
+  ); // Light gray (Notion inspired)
   static const Color backgroundSecondary = Color(0xFFF3F4F6);
   static const Color surface = Color(0xFFFFFFFF); // White cards
   static const Color surfaceElevated = Color(0xFFFFFFFF);

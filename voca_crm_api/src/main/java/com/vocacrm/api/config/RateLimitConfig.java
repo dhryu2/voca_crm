@@ -52,6 +52,13 @@ public class RateLimitConfig {
      */
     private EndpointLimit voice = new EndpointLimit(30, 60);
 
+    /**
+     * 오류 로그 POST 엔드포인트 제한 (/api/error-logs POST)
+     * 비인증 상태에서 호출 가능하므로 보수적 제한
+     * 기본값: 분당 10회
+     */
+    private EndpointLimit errorLog = new EndpointLimit(10, 60);
+
     @Data
     public static class EndpointLimit {
         /**

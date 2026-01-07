@@ -2,6 +2,7 @@ package com.vocacrm.api.controller;
 
 import com.vocacrm.api.dto.request.ReservationCreateRequest;
 import com.vocacrm.api.dto.request.ReservationUpdateRequest;
+import com.vocacrm.api.exception.AccessDeniedException;
 import com.vocacrm.api.model.AccessStatus;
 import com.vocacrm.api.model.Member;
 import com.vocacrm.api.model.Reservation;
@@ -56,7 +57,7 @@ public class ReservationController {
                         UUID.fromString(userId), request.getBusinessPlaceId(), AccessStatus.APPROVED);
 
         if (!hasAccess) {
-            throw new RuntimeException("해당 사업장에 대한 접근 권한이 없습니다.");
+            throw new AccessDeniedException("해당 사업장에 대한 접근 권한이 없습니다.");
         }
 
         Reservation reservation = new Reservation();
@@ -104,7 +105,7 @@ public class ReservationController {
                         UUID.fromString(userId), reservation.getBusinessPlaceId(), AccessStatus.APPROVED);
 
         if (!hasAccess) {
-            throw new RuntimeException("해당 예약에 대한 접근 권한이 없습니다.");
+            throw new AccessDeniedException("해당 예약에 대한 접근 권한이 없습니다.");
         }
 
         return ResponseEntity.ok(reservation);
@@ -133,7 +134,7 @@ public class ReservationController {
                         UUID.fromString(userId), member.getBusinessPlaceId(), AccessStatus.APPROVED);
 
         if (!hasAccess) {
-            throw new RuntimeException("해당 회원의 예약에 대한 접근 권한이 없습니다.");
+            throw new AccessDeniedException("해당 회원의 예약에 대한 접근 권한이 없습니다.");
         }
 
         List<Reservation> reservations = reservationService.getReservationsByMemberId(UUID.fromString(memberId), member.getBusinessPlaceId());
@@ -161,7 +162,7 @@ public class ReservationController {
                         UUID.fromString(userId), businessPlaceId, AccessStatus.APPROVED);
 
         if (!hasAccess) {
-            throw new RuntimeException("해당 사업장에 대한 접근 권한이 없습니다.");
+            throw new AccessDeniedException("해당 사업장에 대한 접근 권한이 없습니다.");
         }
 
         List<Reservation> reservations = reservationService.getReservationsByBusinessPlaceId(businessPlaceId);
@@ -190,7 +191,7 @@ public class ReservationController {
                         UUID.fromString(userId), businessPlaceId, AccessStatus.APPROVED);
 
         if (!hasAccess) {
-            throw new RuntimeException("해당 사업장에 대한 접근 권한이 없습니다.");
+            throw new AccessDeniedException("해당 사업장에 대한 접근 권한이 없습니다.");
         }
 
         List<Reservation> reservations = reservationService.getReservationsByBusinessPlaceAndDate(businessPlaceId, date);
@@ -220,7 +221,7 @@ public class ReservationController {
                         UUID.fromString(userId), businessPlaceId, AccessStatus.APPROVED);
 
         if (!hasAccess) {
-            throw new RuntimeException("해당 사업장에 대한 접근 권한이 없습니다.");
+            throw new AccessDeniedException("해당 사업장에 대한 접근 권한이 없습니다.");
         }
 
         List<Reservation> reservations = reservationService.getReservationsByDateRange(businessPlaceId, startDate, endDate);
@@ -249,7 +250,7 @@ public class ReservationController {
                         UUID.fromString(userId), businessPlaceId, AccessStatus.APPROVED);
 
         if (!hasAccess) {
-            throw new RuntimeException("해당 사업장에 대한 접근 권한이 없습니다.");
+            throw new AccessDeniedException("해당 사업장에 대한 접근 권한이 없습니다.");
         }
 
         List<Reservation> reservations = reservationService.getReservationsByStatus(businessPlaceId, status);
@@ -281,7 +282,7 @@ public class ReservationController {
                         UUID.fromString(userId), existing.getBusinessPlaceId(), AccessStatus.APPROVED);
 
         if (!hasAccess) {
-            throw new RuntimeException("해당 예약에 대한 수정 권한이 없습니다.");
+            throw new AccessDeniedException("해당 예약에 대한 수정 권한이 없습니다.");
         }
 
         Reservation reservation = new Reservation();
@@ -327,7 +328,7 @@ public class ReservationController {
                         UUID.fromString(userId), existing.getBusinessPlaceId(), AccessStatus.APPROVED);
 
         if (!hasAccess) {
-            throw new RuntimeException("해당 예약에 대한 상태 변경 권한이 없습니다.");
+            throw new AccessDeniedException("해당 예약에 대한 상태 변경 권한이 없습니다.");
         }
 
         String statusStr = body.get("status");
@@ -372,7 +373,7 @@ public class ReservationController {
                         UUID.fromString(userId), businessPlaceId, AccessStatus.APPROVED);
 
         if (!hasAccess) {
-            throw new RuntimeException("해당 사업장에 대한 접근 권한이 없습니다.");
+            throw new AccessDeniedException("해당 사업장에 대한 접근 권한이 없습니다.");
         }
 
         Long count;
@@ -414,7 +415,7 @@ public class ReservationController {
                         UUID.fromString(userId), member.getBusinessPlaceId(), AccessStatus.APPROVED);
 
         if (!hasAccess) {
-            throw new RuntimeException("해당 회원의 예약에 대한 접근 권한이 없습니다.");
+            throw new AccessDeniedException("해당 회원의 예약에 대한 접근 권한이 없습니다.");
         }
 
         Long totalCount = reservationService.getMemberReservationCount(UUID.fromString(memberId), member.getBusinessPlaceId());

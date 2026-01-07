@@ -5,6 +5,9 @@ import com.vocacrm.api.model.DeviceToken.DeviceType;
 import com.vocacrm.api.model.NotificationLog;
 import com.vocacrm.api.repository.NotificationLogRepository;
 import com.vocacrm.api.service.PushNotificationService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -37,7 +40,7 @@ public class NotificationController {
      * FCM 토큰 등록/갱신
      */
     @PostMapping("/token")
-    public ResponseEntity<DeviceToken> registerToken(@RequestBody TokenRegistrationRequest request) {
+    public ResponseEntity<DeviceToken> registerToken(@Valid @RequestBody TokenRegistrationRequest request) {
         DeviceToken token = pushNotificationService.registerToken(
                 request.userId(),
                 request.fcmToken(),
@@ -53,7 +56,7 @@ public class NotificationController {
      * FCM 토큰 비활성화 (로그아웃 시)
      */
     @DeleteMapping("/token")
-    public ResponseEntity<Void> deactivateToken(@RequestBody TokenDeactivationRequest request) {
+    public ResponseEntity<Void> deactivateToken(@Valid @RequestBody TokenDeactivationRequest request) {
         pushNotificationService.deactivateToken(request.fcmToken());
         return ResponseEntity.ok().build();
     }
@@ -132,7 +135,7 @@ public class NotificationController {
      * 테스트 알림 발송
      */
     @PostMapping("/test")
-    public ResponseEntity<Map<String, String>> sendTestNotification(@RequestBody TestNotificationRequest request) {
+    public ResponseEntity<Map<String, String>> sendTestNotification(@Valid @RequestBody TestNotificationRequest request) {
         pushNotificationService.sendToUser(
                 request.userId(),
                 NotificationLog.NotificationType.SYSTEM_ANNOUNCEMENT,
@@ -149,20 +152,27 @@ public class NotificationController {
     // ==================== Request DTOs ====================
 
     public record TokenRegistrationRequest(
+            @NotBlank(message = "userId는 필수입니다")
             String userId,
+            @NotBlank(message = "fcmToken은 필수입니다")
             String fcmToken,
+            @NotNull(message = "deviceType은 필수입니다")
             DeviceType deviceType,
             String deviceInfo,
             String appVersion
     ) {}
 
     public record TokenDeactivationRequest(
+            @NotBlank(message = "fcmToken은 필수입니다")
             String fcmToken
     ) {}
 
     public record TestNotificationRequest(
+            @NotBlank(message = "userId는 필수입니다")
             String userId,
+            @NotBlank(message = "title은 필수입니다")
             String title,
+            @NotBlank(message = "body는 필수입니다")
             String body
     ) {}
 }

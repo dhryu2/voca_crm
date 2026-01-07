@@ -1,15 +1,16 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { Button, Input } from '@/components/ui';
 import { Mic, ArrowLeft, User, Phone, Mail } from 'lucide-react';
+import type { OAuthProvider } from '@/lib/oauth';
 
 export function SignupPage() {
   const navigate = useNavigate();
-  const { signup, isLoading } = useAuthStore();
+  const location = useLocation();
+  const { signupWithProvider, isLoading } = useAuthStore();
   const [step, setStep] = useState<'social' | 'info'>('social');
-  const [socialProvider] = useState<string>('');
-  const [socialToken] = useState<string>('');
+  const [selectedProvider, setSelectedProvider] = useState<OAuthProvider | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
@@ -18,21 +19,20 @@ export function SignupPage() {
     email: '',
   });
 
-  const handleSocialAuth = async (provider: 'google' | 'kakao' | 'apple') => {
-    setError(null);
+  // 로그인 페이지에서 넘어온 경우 (회원가입 필요한 경우)
+  const locationState = location.state as { provider?: OAuthProvider; from?: string } | null;
 
-    try {
-      // 실제 구현에서는 OAuth 플로우를 실행하고 토큰을 받음
-      // TODO: 실제 OAuth 통합
-      alert(`${provider} 회원가입은 모바일 앱에서 지원됩니다. 웹 버전은 준비 중입니다.`);
-
-      // 데모용
-      // setSocialProvider(provider);
-      // setSocialToken('demo-token');
-      // setStep('info');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '인증에 실패했습니다.');
+  useEffect(() => {
+    if (locationState?.provider) {
+      setSelectedProvider(locationState.provider);
+      setStep('info');
     }
+  }, [locationState]);
+
+  const handleSocialAuth = async (provider: OAuthProvider) => {
+    setError(null);
+    setSelectedProvider(provider);
+    setStep('info');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -49,18 +49,36 @@ export function SignupPage() {
       return;
     }
 
+    if (!selectedProvider) {
+      setError('소셜 로그인을 먼저 선택해주세요.');
+      setStep('social');
+      return;
+    }
+
     try {
-      await signup({
-        provider: socialProvider,
-        token: socialToken,
+      await signupWithProvider(selectedProvider, {
         username: formData.username,
         phone: formData.phone,
         email: formData.email || undefined,
       });
 
-      navigate('/dashboard', { replace: true });
+      const redirectTo = locationState?.from || '/dashboard';
+      navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : '회원가입에 실패했습니다.');
+    }
+  };
+
+  const getProviderName = (provider: OAuthProvider | null): string => {
+    switch (provider) {
+      case 'google':
+        return 'Google';
+      case 'kakao':
+        return 'Kakao';
+      case 'apple':
+        return 'Apple';
+      default:
+        return '';
     }
   };
 
@@ -197,7 +215,11 @@ export function SignupPage() {
             <>
               <div className="text-center mb-8">
                 <h2 className="text-2xl font-bold text-gray-900">추가 정보 입력</h2>
-                <p className="text-gray-600 mt-2">서비스 이용을 위한 기본 정보를 입력해주세요</p>
+                <p className="text-gray-600 mt-2">
+                  {getProviderName(selectedProvider)} 계정으로 가입합니다.
+                  <br />
+                  서비스 이용을 위한 기본 정보를 입력해주세요.
+                </p>
               </div>
 
               {error && (
@@ -239,16 +261,19 @@ export function SignupPage() {
                   className="w-full h-12 mt-6"
                   isLoading={isLoading}
                 >
-                  가입 완료
+                  {getProviderName(selectedProvider)}로 가입 완료
                 </Button>
 
                 <Button
                   type="button"
                   variant="ghost"
                   className="w-full"
-                  onClick={() => setStep('social')}
+                  onClick={() => {
+                    setStep('social');
+                    setSelectedProvider(null);
+                  }}
                 >
-                  이전으로
+                  다른 방법으로 가입
                 </Button>
               </form>
             </>

@@ -3,6 +3,9 @@ package com.vocacrm.api.util;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -14,6 +17,13 @@ import java.util.function.Function;
 @Component
 public class JwtUtil {
 
+    private static final Logger log = LoggerFactory.getLogger(JwtUtil.class);
+
+    /**
+     * HMAC-SHA256 알고리즘에 필요한 최소 키 길이 (256비트 = 32바이트)
+     */
+    private static final int MIN_SECRET_LENGTH = 32;
+
     @Value("${jwt.secret}")
     private String secret;
 
@@ -22,6 +32,27 @@ public class JwtUtil {
 
     @Value("${jwt.refresh-token-validity}")
     private Long refreshTokenValidity;
+
+    /**
+     * 애플리케이션 시작 시 JWT Secret 길이 검증
+     * HMAC-SHA256은 최소 256비트(32바이트) 키가 필요합니다.
+     */
+    @PostConstruct
+    public void validateSecretKey() {
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException(
+                "JWT Secret이 설정되지 않았습니다. JWT_SECRET 환경변수를 설정해주세요.");
+        }
+
+        int secretLength = secret.getBytes(StandardCharsets.UTF_8).length;
+        if (secretLength < MIN_SECRET_LENGTH) {
+            throw new IllegalStateException(
+                String.format("JWT Secret 길이가 너무 짧습니다. 현재: %d바이트, 최소: %d바이트 (HMAC-SHA256 요구사항)",
+                    secretLength, MIN_SECRET_LENGTH));
+        }
+
+        log.info("JWT Secret 검증 완료: {}바이트 (최소 요구사항 충족)", secretLength);
+    }
 
     private SecretKey getSigningKey() {
         return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));

@@ -179,8 +179,8 @@ rate-limit:
 # AI 서버 설정 (Ollama)
 ai:
   server:
-    url: ${AI_SERVER_URL:http://localhost:11434}
-    model: ${AI_MODEL_NAME:llama-3.2-Korean-Bllossom-3B}
+    url: ${AI_SERVER_URL:http://100.76.182.77:11434}
+    model: ${AI_MODEL_NAME:voca-crm}
     timeout: 30000                     # AI 서버 응답 타임아웃 (30초)
   daily-limit:
     enabled: true                      # 일일 제한 활성화
@@ -198,6 +198,23 @@ deepl:
 # 시스템 관리자 설정
 app:
   system-admin-ids: ${SYSTEM_ADMIN_IDS:admin}
+
+# OpenAPI/Swagger 설정
+springdoc:
+  api-docs:
+    path: /v3/api-docs                   # OpenAPI JSON 경로
+    enabled: true                        # API 문서 활성화
+  swagger-ui:
+    path: /swagger-ui.html               # Swagger UI 경로
+    enabled: true                        # Swagger UI 활성화
+    tags-sorter: alpha                   # 태그 알파벳순 정렬
+    operations-sorter: method            # HTTP 메서드순 정렬
+    display-request-duration: true       # 요청 소요 시간 표시
+    doc-expansion: none                  # 기본적으로 모든 태그 접힘
+  default-produces-media-type: application/json
+  default-consumes-media-type: application/json
+  packages-to-scan: com.vocacrm.api.controller  # 스캔 패키지
+  paths-to-match: /api/**                # 문서화할 API 경로
 
 # Actuator 엔드포인트 보안 설정
 management:

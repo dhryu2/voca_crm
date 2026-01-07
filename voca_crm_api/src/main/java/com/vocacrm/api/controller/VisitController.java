@@ -1,16 +1,20 @@
 package com.vocacrm.api.controller;
 
+import com.vocacrm.api.exception.AccessDeniedException;
 import com.vocacrm.api.model.AccessStatus;
 import com.vocacrm.api.model.Visit;
 import com.vocacrm.api.repository.UserBusinessPlaceRepository;
 import com.vocacrm.api.service.VisitService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -29,7 +33,7 @@ public class VisitController {
                 .existsByUserIdAndBusinessPlaceIdAndStatus(UUID.fromString(userId), businessPlaceId, AccessStatus.APPROVED);
 
         if (!hasAccess) {
-            throw new RuntimeException("해당 사업장에 대한 접근 권한이 없습니다.");
+            throw new AccessDeniedException("해당 사업장에 대한 접근 권한이 없습니다.");
         }
     }
 
@@ -41,18 +45,12 @@ public class VisitController {
      */
     @PostMapping("/checkin")
     public ResponseEntity<Visit> checkIn(
-            @RequestBody Map<String, String> payload,
+            @Valid @RequestBody CheckInRequest request,
             HttpServletRequest servletRequest) {
         String userId = (String) servletRequest.getAttribute("userId");
-        String memberId = payload.get("memberId");
-        String note = payload.get("note");
-
-        if (memberId == null) {
-            return ResponseEntity.badRequest().build();
-        }
 
         // 회원이 사용자의 사업장에 속하는지 확인
-        Visit visit = visitService.checkInWithUserCheck(memberId, userId, note);
+        Visit visit = visitService.checkInWithUserCheck(request.getMemberId(), userId, request.getNote());
         return ResponseEntity.ok(visit);
     }
 
@@ -110,5 +108,16 @@ public class VisitController {
 
         visitService.cancelCheckIn(visitId, businessPlaceId);
         return ResponseEntity.noContent().build();
+    }
+
+    // ==================== Request DTOs ====================
+
+    @Data
+    public static class CheckInRequest {
+        @NotBlank(message = "회원 ID는 필수입니다")
+        private String memberId;
+
+        @Size(max = 500, message = "메모는 500자를 초과할 수 없습니다")
+        private String note;
     }
 }

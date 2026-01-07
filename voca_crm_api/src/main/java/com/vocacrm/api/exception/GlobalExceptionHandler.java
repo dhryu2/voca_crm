@@ -215,6 +215,34 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * AccessDeniedException 처리
+     * 권한이 없는 리소스에 접근할 때 발생
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex) {
+        log.warn("Access denied: {}", ex.getMessage());
+        ErrorResponse error = new ErrorResponse(
+            ex.getMessage(),
+            HttpStatus.FORBIDDEN.value()
+        );
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+    }
+
+    /**
+     * BusinessException 처리
+     * 비즈니스 로직에서 발생하는 일반 예외
+     */
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<ErrorResponse> handleBusinessException(BusinessException ex) {
+        log.warn("Business exception [{}]: {}", ex.getErrorCode(), ex.getMessage());
+        ErrorResponse error = new ErrorResponse(
+            ex.getMessage(),
+            HttpStatus.BAD_REQUEST.value()
+        );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
+    /**
      * IllegalArgumentException 처리
      * 비즈니스 로직에서 발생하는 검증 오류 (예: 중복 예약, 잘못된 날짜 등)
      */
