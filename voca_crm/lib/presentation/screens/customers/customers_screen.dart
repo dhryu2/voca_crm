@@ -134,11 +134,21 @@ class _CustomersScreenState extends State<CustomersScreen> {
       });
       // Client-side filtering for other criteria
       _applyFilters();
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('[CustomersScreen] Error loading members: $e');
       if (!mounted) return;
       setState(() => _isLoading = false);
-      AppMessageHandler.handleApiError(context, e);
+      if (mounted) {
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'CustomersScreen',
+          action: '고객 목록 조회',
+          userId: widget.user.id,
+          businessPlaceId: _selectedBusinessPlaceFilter,
+        );
+      }
     }
   }
 
@@ -506,9 +516,17 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                 );
                                 _loadMembers();
                               }
-                            } catch (e) {
+                            } catch (e, stackTrace) {
                               if (context.mounted) {
-                                AppMessageHandler.handleApiError(context, e);
+                                await AppMessageHandler.handleErrorWithLogging(
+                                  context,
+                                  e,
+                                  stackTrace,
+                                  screenName: 'CustomersScreen',
+                                  action: '고객 추가',
+                                  userId: widget.user.id,
+                                  businessPlaceId: _selectedBusinessPlaceFilter,
+                                );
                               }
                             }
                           },
@@ -1369,9 +1387,17 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                       );
                                       _loadMembers();
                                     }
-                                  } catch (e) {
+                                  } catch (e, stackTrace) {
                                     if (context.mounted) {
-                                      AppMessageHandler.handleApiError(context, e);
+                                      await AppMessageHandler.handleErrorWithLogging(
+                                        context,
+                                        e,
+                                        stackTrace,
+                                        screenName: 'CustomersScreen',
+                                        action: '고객 수정',
+                                        userId: widget.user.id,
+                                        businessPlaceId: _selectedBusinessPlaceFilter,
+                                      );
                                     }
                                   }
                                 },
@@ -1608,10 +1634,18 @@ class _CustomersScreenState extends State<CustomersScreen> {
                               );
                               _loadMembers();
                             }
-                          } catch (e) {
+                          } catch (e, stackTrace) {
                             if (context.mounted) {
                               Navigator.pop(context);
-                              AppMessageHandler.handleApiError(context, e);
+                              await AppMessageHandler.handleErrorWithLogging(
+                                context,
+                                e,
+                                stackTrace,
+                                screenName: 'CustomersScreen',
+                                action: '고객 삭제',
+                                userId: widget.user.id,
+                                businessPlaceId: _selectedBusinessPlaceFilter,
+                              );
                             }
                           }
                         },
@@ -1834,11 +1868,16 @@ class _CustomersScreenState extends State<CustomersScreen> {
             '${member.name}님이 체크인되었습니다',
           );
         }
-      } catch (e) {
+      } catch (e, stackTrace) {
         if (mounted) {
-          AppMessageHandler.showErrorSnackBar(
+          await AppMessageHandler.handleErrorWithLogging(
             context,
-            '체크인 실패: ${AppMessageHandler.parseErrorMessage(e)}',
+            e,
+            stackTrace,
+            screenName: 'CustomersScreen',
+            action: '고객 체크인',
+            userId: widget.user.id,
+            businessPlaceId: _selectedBusinessPlaceFilter,
           );
         }
       }

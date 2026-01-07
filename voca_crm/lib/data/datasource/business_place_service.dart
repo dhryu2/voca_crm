@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:voca_crm/core/network/api_client.dart';
+import 'package:voca_crm/core/error/exception_parser.dart';
 import 'package:voca_crm/domain/entity/business_place.dart';
 import 'package:voca_crm/domain/entity/business_place_deletion_preview.dart';
 import 'package:voca_crm/domain/entity/business_place_access_request.dart';
@@ -15,59 +16,64 @@ class BusinessPlaceService {
   BusinessPlaceService({ApiClient? apiClient})
       : _apiClient = apiClient ?? ApiClient.instance;
 
-  /// API 응답에서 사용자 친화적 오류 메시지 추출
-  String _extractErrorMessage(String responseBody, String fallbackMessage) {
-    try {
-      final data = jsonDecode(responseBody);
-      if (data is Map<String, dynamic>) {
-        // fieldErrors가 있으면 첫 번째 필드 오류 메시지 반환
-        if (data['fieldErrors'] is Map && (data['fieldErrors'] as Map).isNotEmpty) {
-          final fieldErrors = data['fieldErrors'] as Map;
-          return fieldErrors.values.first.toString();
-        }
-        // message 필드가 있으면 반환
-        if (data['message'] != null && data['message'].toString().isNotEmpty) {
-          return data['message'].toString();
-        }
-      }
-    } catch (_) {}
-    return fallbackMessage;
-  }
-
   Future<Map<String, dynamic>> createBusinessPlace({
     required String userId,
     required String name,
     String? address,
     String? phone,
   }) async {
+    // userId는 JWT 토큰에서 추출되므로 query param으로 전송하지 않음
     final response = await _apiClient.post(
       '/api/business-places',
       body: {'name': name, 'address': address, 'phone': phone},
-      queryParams: {'userId': userId},
     );
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
+      // API 응답: CreateBusinessPlaceResponse DTO (플랫 구조)
+      final now = DateTime.now();
+      final businessPlace = BusinessPlace(
+        id: data['businessPlaceId'],
+        name: data['businessPlaceName'],
+        address: data['businessPlaceAddress'],
+        phone: data['businessPlacePhone'],
+        createdAt: data['businessPlaceCreatedAt'] != null
+            ? DateTime.parse(data['businessPlaceCreatedAt'])
+            : now,
+        updatedAt: data['businessPlaceCreatedAt'] != null
+            ? DateTime.parse(data['businessPlaceCreatedAt'])
+            : now,
+      );
+      final user = User(
+        id: data['userId'].toString(),
+        username: data['username'] ?? '',
+        displayName: data['displayName'],
+        email: data['email'] ?? '',
+        phone: '', // CreateBusinessPlaceResponse에는 phone이 없음
+        defaultBusinessPlaceId: data['defaultBusinessPlaceId'],
+        createdAt: now,
+        updatedAt: now,
+      );
       return {
-        'businessPlace': BusinessPlace.fromJson(data['businessPlace']),
-        'user': User.fromJson(data['user']),
+        'businessPlace': businessPlace,
+        'user': user,
       };
     } else {
-      throw Exception(_extractErrorMessage(response.body, '사업장 생성에 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
   Future<List<BusinessPlaceWithRole>> getMyBusinessPlaces(String userId) async {
+    // userId는 JWT 토큰에서 추출되므로 query param으로 전송하지 않음
     final response = await _apiClient.get(
       '/api/business-places/my',
-      queryParams: {'userId': userId},
     );
 
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       return data.map((json) => BusinessPlaceWithRole.fromJson(json)).toList();
     } else {
-      throw Exception(_extractErrorMessage(response.body, '사업장 목록을 불러오는데 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -80,7 +86,7 @@ class BusinessPlaceService {
     if (response.statusCode == 200) {
       return BusinessPlace.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(_extractErrorMessage(response.body, '사업장 정보를 불러오는데 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -89,43 +95,44 @@ class BusinessPlaceService {
     required String businessPlaceId,
     required Role role,
   }) async {
+    // userId는 JWT 토큰에서 추출되므로 role만 query param으로 전송
     final response = await _apiClient.post(
       '/api/business-places/$businessPlaceId/request-access',
-      queryParams: {'userId': userId, 'role': role.name},
+      queryParams: {'role': role.name},
     );
 
     if (response.statusCode == 200) {
       return BusinessPlaceAccessRequest.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(_extractErrorMessage(response.body, '접근 요청에 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
   Future<List<BusinessPlaceAccessRequest>> getSentRequests(String userId) async {
+    // userId는 JWT 토큰에서 추출되므로 query param으로 전송하지 않음
     final response = await _apiClient.get(
       '/api/business-places/requests/sent',
-      queryParams: {'userId': userId},
     );
 
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       return data.map((json) => BusinessPlaceAccessRequest.fromJson(json)).toList();
     } else {
-      throw Exception(_extractErrorMessage(response.body, '보낸 요청 목록을 불러오는데 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
   Future<List<BusinessPlaceAccessRequest>> getReceivedRequests(String userId) async {
+    // userId는 JWT 토큰에서 추출되므로 query param으로 전송하지 않음
     final response = await _apiClient.get(
       '/api/business-places/requests/received',
-      queryParams: {'userId': userId},
     );
 
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       return data.map((json) => BusinessPlaceAccessRequest.fromJson(json)).toList();
     } else {
-      throw Exception(_extractErrorMessage(response.body, '받은 요청 목록을 불러오는데 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -133,15 +140,15 @@ class BusinessPlaceService {
     required String requestId,
     required String ownerId,
   }) async {
+    // ownerId는 JWT 토큰에서 추출되므로 query param으로 전송하지 않음
     final response = await _apiClient.put(
       '/api/business-places/requests/$requestId/approve',
-      queryParams: {'ownerId': ownerId},
     );
 
     if (response.statusCode == 200) {
       return BusinessPlaceAccessRequest.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(_extractErrorMessage(response.body, '요청 승인에 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -149,15 +156,15 @@ class BusinessPlaceService {
     required String requestId,
     required String ownerId,
   }) async {
+    // ownerId는 JWT 토큰에서 추출되므로 query param으로 전송하지 않음
     final response = await _apiClient.put(
       '/api/business-places/requests/$requestId/reject',
-      queryParams: {'ownerId': ownerId},
     );
 
     if (response.statusCode == 200) {
       return BusinessPlaceAccessRequest.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(_extractErrorMessage(response.body, '요청 거절에 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -165,13 +172,13 @@ class BusinessPlaceService {
     required String requestId,
     required String userId,
   }) async {
+    // userId는 JWT 토큰에서 추출되므로 query param으로 전송하지 않음
     final response = await _apiClient.delete(
       '/api/business-places/requests/$requestId',
-      queryParams: {'userId': userId},
     );
 
     if (response.statusCode != 204) {
-      throw Exception(_extractErrorMessage(response.body, '요청 삭제에 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -181,14 +188,25 @@ class BusinessPlaceService {
   ) async {
     final response = await _apiClient.put(
       '/api/business-places/$businessPlaceId/set-default',
-      queryParams: {'userId': userId},
     );
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      return User.fromJson(data['user']);
+      // API 응답: SetDefaultBusinessPlaceResponse DTO (플랫 구조)
+      // userId, username, displayName, email, defaultBusinessPlaceId
+      final now = DateTime.now();
+      return User(
+        id: data['userId'].toString(),
+        username: data['username'] ?? '',
+        displayName: data['displayName'],
+        email: data['email'] ?? '',
+        phone: '', // SetDefaultBusinessPlaceResponse에는 phone이 없음
+        defaultBusinessPlaceId: data['defaultBusinessPlaceId'],
+        createdAt: now,
+        updatedAt: now,
+      );
     } else {
-      throw Exception(_extractErrorMessage(response.body, '기본 사업장 설정에 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -196,13 +214,13 @@ class BusinessPlaceService {
     String userId,
     String businessPlaceId,
   ) async {
+    // userId는 JWT 토큰에서 추출되므로 query param으로 전송하지 않음
     final response = await _apiClient.delete(
       '/api/business-places/$businessPlaceId/remove',
-      queryParams: {'userId': userId},
     );
 
     if (response.statusCode != 204) {
-      throw Exception(_extractErrorMessage(response.body, '사업장 탈퇴에 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -213,42 +231,42 @@ class BusinessPlaceService {
     String? address,
     String? phone,
   }) async {
+    // userId는 JWT 토큰에서 추출되므로 query param으로 전송하지 않음
     final response = await _apiClient.put(
       '/api/business-places/$businessPlaceId',
       body: {'name': name, 'address': address, 'phone': phone},
-      queryParams: {'userId': userId},
     );
 
     if (response.statusCode == 200) {
       return BusinessPlace.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(_extractErrorMessage(response.body, '사업장 정보 수정에 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
   Future<int> getPendingRequestCount(String userId) async {
+    // userId는 JWT 토큰에서 추출되므로 query param으로 전송하지 않음
     final response = await _apiClient.get(
       '/api/business-places/requests/pending-count',
-      queryParams: {'userId': userId},
     );
 
     if (response.statusCode == 200) {
       return int.parse(response.body);
     } else {
-      throw Exception(_extractErrorMessage(response.body, '대기 중인 요청 수를 불러오는데 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
   Future<int> getUnreadResultCount(String userId) async {
+    // userId는 JWT 토큰에서 추출되므로 query param으로 전송하지 않음
     final response = await _apiClient.get(
       '/api/business-places/requests/unread-count',
-      queryParams: {'userId': userId},
     );
 
     if (response.statusCode == 200) {
       return int.parse(response.body);
     } else {
-      throw Exception(_extractErrorMessage(response.body, '읽지 않은 결과 수를 불러오는데 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -256,30 +274,30 @@ class BusinessPlaceService {
     required String requestId,
     required String userId,
   }) async {
+    // userId는 JWT 토큰에서 추출되므로 query param으로 전송하지 않음
     final response = await _apiClient.put(
       '/api/business-places/requests/$requestId/mark-read',
-      queryParams: {'userId': userId},
     );
 
     if (response.statusCode == 200) {
       return BusinessPlaceAccessRequest.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(_extractErrorMessage(response.body, '읽음 처리에 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
   /// 읽지 않은 처리된 요청 목록 조회 (요청자 본인 기준)
   Future<List<BusinessPlaceAccessRequest>> getUnreadRequests(String userId) async {
+    // userId는 JWT 토큰에서 추출되므로 query param으로 전송하지 않음
     final response = await _apiClient.get(
       '/api/business-places/requests/unread',
-      queryParams: {'userId': userId},
     );
 
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       return data.map((json) => BusinessPlaceAccessRequest.fromJson(json)).toList();
     } else {
-      throw Exception(_extractErrorMessage(response.body, '읽지 않은 요청 목록을 불러오는데 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -295,7 +313,7 @@ class BusinessPlaceService {
       final List<dynamic> data = jsonDecode(response.body);
       return data.map((json) => BusinessPlaceMember.fromJson(json)).toList();
     } else {
-      throw Exception(_extractErrorMessage(response.body, '멤버 목록을 불러오는데 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -312,7 +330,7 @@ class BusinessPlaceService {
     if (response.statusCode == 200) {
       return BusinessPlaceMember.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(_extractErrorMessage(response.body, '역할 변경에 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -323,7 +341,7 @@ class BusinessPlaceService {
     );
 
     if (response.statusCode != 204) {
-      throw Exception(_extractErrorMessage(response.body, '멤버 삭제에 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -338,7 +356,7 @@ class BusinessPlaceService {
     if (response.statusCode == 200) {
       return BusinessPlaceDeletionPreview.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(_extractErrorMessage(response.body, '삭제 미리보기를 불러오는데 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -353,7 +371,7 @@ class BusinessPlaceService {
     );
 
     if (response.statusCode != 204) {
-      throw Exception(_extractErrorMessage(response.body, '사업장 삭제에 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 }

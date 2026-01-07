@@ -199,8 +199,19 @@ class _MainScreenState extends State<MainScreen> {
 
       // 공지사항을 우선순위 순으로 하나씩 표시
       await _showNoticePopups(notices);
-    } catch (e) {
-      // Error loading notices
+    } catch (e, stackTrace) {
+      // Silent catch with logging
+      if (mounted) {
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'MainScreen',
+          action: '공지사항 조회',
+          userId: widget.user.id,
+          showSnackbar: false,
+        );
+      }
     }
   }
 
@@ -232,8 +243,19 @@ class _MainScreenState extends State<MainScreen> {
           userId: widget.user.providerId,
           doNotShowAgain: doNotShowAgain,
         );
-      } catch (e) {
-        // Error recording notice view
+      } catch (e, stackTrace) {
+        // Silent catch with logging
+        if (mounted) {
+          await AppMessageHandler.handleErrorWithLogging(
+            context,
+            e,
+            stackTrace,
+            screenName: 'MainScreen',
+            action: '공지사항 열람 기록 저장',
+            userId: widget.user.id,
+            showSnackbar: false,
+          );
+        }
       }
     }
   }

@@ -77,12 +77,15 @@ class _ErrorLogsScreenState extends State<ErrorLogsScreen> {
         _hasMore = page.content.length >= _pageSize;
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      AppMessageHandler.showErrorSnackBar(
+      await AppMessageHandler.handleErrorWithLogging(
         context,
-        '오류 로그를 불러오지 못했습니다: ${AppMessageHandler.parseErrorMessage(e)}',
+        e,
+        stackTrace,
+        screenName: 'ErrorLogsScreen',
+        action: '오류 로그 목록 조회',
       );
     }
   }
@@ -112,9 +115,16 @@ class _ErrorLogsScreenState extends State<ErrorLogsScreen> {
         _hasMore = page.content.length >= _pageSize;
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (!mounted) return;
       setState(() => _isLoading = false);
+      await AppMessageHandler.handleErrorWithLogging(
+        context,
+        e,
+        stackTrace,
+        screenName: 'ErrorLogsScreen',
+        action: '오류 로그 목록 조회',
+      );
     }
   }
 
@@ -654,11 +664,14 @@ class _ErrorLogsScreenState extends State<ErrorLogsScreen> {
       Navigator.pop(sheetContext);
       await _loadLogs();
       AppMessageHandler.showSuccessSnackBar(context, '오류가 해결 처리되었습니다');
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (!mounted) return;
-      AppMessageHandler.showErrorSnackBar(
+      await AppMessageHandler.handleErrorWithLogging(
         context,
-        '해결 처리 실패: ${AppMessageHandler.parseErrorMessage(e)}',
+        e,
+        stackTrace,
+        screenName: 'ErrorLogsScreen',
+        action: '오류 해결 처리',
       );
     }
   }

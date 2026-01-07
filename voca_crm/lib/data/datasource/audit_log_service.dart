@@ -45,9 +45,7 @@ class AuditLogService {
     if (entityType != null) {
       queryParams['entityType'] = entityType;
     }
-    if (action != null) {
-      queryParams['action'] = action;
-    }
+    // 'action' 파라미터는 API에서 지원하지 않으므로 제외
     if (startDate != null) {
       queryParams['startDate'] = startDate.toIso8601String();
     }

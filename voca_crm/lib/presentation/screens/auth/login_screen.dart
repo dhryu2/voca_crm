@@ -110,7 +110,7 @@ class _LoginScreenState extends State<LoginScreen>
       if (mounted) {
         AppMessageHandler.showErrorSnackBar(context, '유효하지 않은 인증 토큰입니다');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       setState(() => _isLoading = false);
       if (mounted) {
         String errorMessage = e.toString();
@@ -118,7 +118,13 @@ class _LoginScreenState extends State<LoginScreen>
           // 사용자가 취소한 경우 메시지 표시 안함
           return;
         }
-        AppMessageHandler.showErrorSnackBar(context, AppMessageHandler.parseErrorMessage(e));
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'LoginScreen',
+          action: '소셜 로그인',
+        );
       }
     }
   }

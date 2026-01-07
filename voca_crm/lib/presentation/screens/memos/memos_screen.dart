@@ -182,10 +182,20 @@ class _MemosScreenState extends State<MemosScreen>
         _isLoading = false;
         _applyFilters();
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      AppMessageHandler.handleApiError(context, e);
+      if (mounted) {
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'MemosScreen',
+          action: '메모 목록 조회',
+          userId: widget.user.id,
+          businessPlaceId: _selectedBusinessPlaceFilter,
+        );
+      }
     }
   }
 
@@ -499,7 +509,7 @@ class _MemosScreenState extends State<MemosScreen>
                                   );
                                   _loadMembersWithMemos();
                                 }
-                              } catch (e) {
+                              } catch (e, stackTrace) {
                                 if (context.mounted) {
                                   // Check if it's memo limit exceeded error
                                   String errorMsg = e.toString();
@@ -581,17 +591,30 @@ class _MemosScreenState extends State<MemosScreen>
                                           );
                                           _loadMembersWithMemos();
                                         }
-                                      } catch (e2) {
+                                      } catch (e2, stackTrace2) {
                                         if (context.mounted) {
-                                          AppMessageHandler.handleApiError(
+                                          await AppMessageHandler.handleErrorWithLogging(
                                             context,
                                             e2,
+                                            stackTrace2,
+                                            screenName: 'MemosScreen',
+                                            action: '메모 추가 (오래된 메모 삭제 후)',
+                                            userId: widget.user.id,
+                                            businessPlaceId: _selectedBusinessPlaceFilter,
                                           );
                                         }
                                       }
                                     }
                                   } else {
-                                    AppMessageHandler.handleApiError(context, e);
+                                    await AppMessageHandler.handleErrorWithLogging(
+                                      context,
+                                      e,
+                                      stackTrace,
+                                      screenName: 'MemosScreen',
+                                      action: '메모 추가',
+                                      userId: widget.user.id,
+                                      businessPlaceId: _selectedBusinessPlaceFilter,
+                                    );
                                   }
                                 }
                               }
@@ -908,11 +931,18 @@ class _MemosScreenState extends State<MemosScreen>
                                                       ? '중요 메모 해제'
                                                       : '중요 메모로 설정',
                                                 );
-                                              } catch (e) {
-                                                AppMessageHandler.showErrorSnackBar(
-                                                  context,
-                                                  '오류가 발생했습니다',
-                                                );
+                                              } catch (e, stackTrace) {
+                                                if (mounted) {
+                                                  await AppMessageHandler.handleErrorWithLogging(
+                                                    context,
+                                                    e,
+                                                    stackTrace,
+                                                    screenName: 'MemosScreen',
+                                                    action: '중요 메모 토글',
+                                                    userId: widget.user.id,
+                                                    businessPlaceId: _selectedBusinessPlaceFilter,
+                                                  );
+                                                }
                                               }
                                             },
                                             borderRadius: BorderRadius.circular(
@@ -1420,9 +1450,17 @@ class _MemosScreenState extends State<MemosScreen>
                                     );
                                     await reloadMemos();
                                   }
-                                } catch (e) {
+                                } catch (e, stackTrace) {
                                   if (context.mounted) {
-                                    AppMessageHandler.handleApiError(context, e);
+                                    await AppMessageHandler.handleErrorWithLogging(
+                                      context,
+                                      e,
+                                      stackTrace,
+                                      screenName: 'MemosScreen',
+                                      action: '메모 수정',
+                                      userId: widget.user.id,
+                                      businessPlaceId: _selectedBusinessPlaceFilter,
+                                    );
                                   }
                                 }
                               },
@@ -1678,9 +1716,17 @@ class _MemosScreenState extends State<MemosScreen>
           AppMessageHandler.showSuccessSnackBar(context, '메모가 삭제 대기 상태로 전환되었습니다');
           await reloadMemos();
         }
-      } catch (e) {
+      } catch (e, stackTrace) {
         if (mounted) {
-          AppMessageHandler.handleApiError(context, e);
+          await AppMessageHandler.handleErrorWithLogging(
+            context,
+            e,
+            stackTrace,
+            screenName: 'MemosScreen',
+            action: '메모 삭제',
+            userId: widget.user.id,
+            businessPlaceId: _selectedBusinessPlaceFilter,
+          );
         }
       }
     }

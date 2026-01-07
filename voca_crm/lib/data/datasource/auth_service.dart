@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:voca_crm/core/auth/token_manager.dart';
 import 'package:voca_crm/core/constants/api_constants.dart';
+import 'package:voca_crm/core/error/app_exception.dart';
 import 'package:voca_crm/core/session/session_manager.dart';
 import 'package:voca_crm/domain/entity/login_result.dart';
 import 'package:voca_crm/domain/entity/tokens.dart';
@@ -54,14 +55,15 @@ class AuthService {
       final data = jsonDecode(response.body);
       throw InvalidTokenException(data['message'] ?? '유효하지 않은 인증 토큰입니다');
     } else {
-      // 서버 오류 메시지 추출 시도
+      // 서버 오류 메시지 추출하여 ServerException으로 throw
+      String message = '로그인에 실패했습니다. 잠시 후 다시 시도해주세요.';
       try {
         final data = jsonDecode(response.body);
         if (data['message'] != null) {
-          throw Exception(data['message']);
+          message = data['message'];
         }
       } catch (_) {}
-      throw Exception('로그인에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      throw ServerException(message: message);
     }
   }
 
@@ -121,14 +123,15 @@ class AuthService {
       }
       throw InvalidInputException(data['message'] ?? '입력 정보가 올바르지 않습니다');
     } else {
-      // 서버 오류 메시지 추출 시도
+      // 서버 오류 메시지 추출하여 ServerException으로 throw
+      String message = '회원가입에 실패했습니다. 잠시 후 다시 시도해주세요.';
       try {
         final data = jsonDecode(response.body);
         if (data['message'] != null) {
-          throw Exception(data['message']);
+          message = data['message'];
         }
       } catch (_) {}
-      throw Exception('회원가입에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      throw ServerException(message: message);
     }
   }
 
@@ -150,12 +153,30 @@ class AuthService {
   Future<Tokens?> getTokens() => _tokenManager.getTokens();
 
   /// 로그아웃
+  ///
+  /// 서버에 로그아웃 요청을 보내 refresh token을 무효화하고,
+  /// 로컬 세션과 토큰을 정리합니다.
   Future<void> logout() async {
-    // 세션 종료
-    SessionManager.instance.endSession();
+    try {
+      // 서버에 로그아웃 요청 (refresh token 무효화)
+      final tokens = await _tokenManager.getTokens();
+      if (tokens != null && tokens.refreshToken.isNotEmpty) {
+        await http.post(
+          Uri.parse('$baseUrl/api/auth/logout'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'refreshToken': tokens.refreshToken}),
+        );
+      }
+    } catch (e) {
+      // 서버 로그아웃 실패해도 로컬 정리는 진행
+      // 네트워크 오류 등의 경우에도 사용자는 로그아웃되어야 함
+    } finally {
+      // 세션 종료
+      SessionManager.instance.endSession();
 
-    // 토큰 삭제 (TokenManager 위임)
-    await _tokenManager.clearTokens();
+      // 토큰 삭제 (TokenManager 위임)
+      await _tokenManager.clearTokens();
+    }
   }
 
   /// 토큰 갱신
@@ -167,7 +188,7 @@ class AuthService {
     final tokens = await _tokenManager.refreshTokens();
 
     if (tokens == null) {
-      throw Exception('토큰 갱신에 실패했습니다');
+      throw const TokenRefreshException();
     }
 
     // Create User from JWT token

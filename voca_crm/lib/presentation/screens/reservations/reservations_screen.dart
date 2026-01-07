@@ -123,12 +123,23 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
         _isLoading = false;
         _updateSelectedDayReservations();
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
         _error = AppMessageHandler.parseErrorMessage(e);
       });
+      if (mounted) {
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'ReservationsScreen',
+          action: '예약 목록 조회',
+          userId: widget.user.id,
+          businessPlaceId: _selectedBusinessPlaceId,
+        );
+      }
     }
   }
 
@@ -578,11 +589,16 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                                 Navigator.pop(context);
                                                 await _loadReservations();
                                                 AppMessageHandler.showSuccessSnackBar(context, '예약이 생성되었습니다');
-                                              } catch (e) {
+                                              } catch (e, stackTrace) {
                                                 if (!mounted) return;
-                                                AppMessageHandler.showErrorSnackBar(
+                                                await AppMessageHandler.handleErrorWithLogging(
                                                   context,
-                                                  '예약 생성 실패: ${AppMessageHandler.parseErrorMessage(e)}',
+                                                  e,
+                                                  stackTrace,
+                                                  screenName: 'ReservationsScreen',
+                                                  action: '예약 추가',
+                                                  userId: widget.user.id,
+                                                  businessPlaceId: _selectedBusinessPlaceId,
                                                 );
                                               }
                                             },
@@ -1148,11 +1164,16 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                       Navigator.pop(context);
                                       await _loadReservations();
                                       AppMessageHandler.showSuccessSnackBar(context, '예약이 확정되었습니다');
-                                    } catch (e) {
+                                    } catch (e, stackTrace) {
                                       if (!mounted) return;
-                                      AppMessageHandler.showErrorSnackBar(
+                                      await AppMessageHandler.handleErrorWithLogging(
                                         context,
-                                        '상태 변경 실패: ${AppMessageHandler.parseErrorMessage(e)}',
+                                        e,
+                                        stackTrace,
+                                        screenName: 'ReservationsScreen',
+                                        action: '예약 상태 변경',
+                                        userId: widget.user.id,
+                                        businessPlaceId: _selectedBusinessPlaceId,
                                       );
                                     }
                                   },
@@ -1568,11 +1589,16 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                           Navigator.pop(context);
                                           await _loadReservations();
                                           AppMessageHandler.showSuccessSnackBar(context, '예약이 수정되었습니다');
-                                        } catch (e) {
+                                        } catch (e, stackTrace) {
                                           if (!mounted) return;
-                                          AppMessageHandler.showErrorSnackBar(
+                                          await AppMessageHandler.handleErrorWithLogging(
                                             context,
-                                            '예약 수정 실패: ${AppMessageHandler.parseErrorMessage(e)}',
+                                            e,
+                                            stackTrace,
+                                            screenName: 'ReservationsScreen',
+                                            action: '예약 수정',
+                                            userId: widget.user.id,
+                                            businessPlaceId: _selectedBusinessPlaceId,
                                           );
                                         }
                                       },

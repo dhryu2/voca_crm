@@ -76,10 +76,17 @@ class _DeletedMemosScreenState extends State<DeletedMemosScreen> {
         _deletedMemoMembers = memberCache;
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
       setState(() => _isLoading = false);
       if (mounted) {
-        AppMessageHandler.handleApiError(context, e);
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'DeletedMemosScreen',
+          action: '삭제된 메모 목록 조회',
+          userId: widget.user.id,
+        );
       }
     }
   }
@@ -213,10 +220,17 @@ class _DeletedMemosScreenState extends State<DeletedMemosScreen> {
                               );
                               _loadDeletedMemos();
                             }
-                          } catch (e) {
+                          } catch (e, stackTrace) {
                             if (context.mounted) {
                               Navigator.pop(context);
-                              AppMessageHandler.handleApiError(context, e);
+                              await AppMessageHandler.handleErrorWithLogging(
+                                context,
+                                e,
+                                stackTrace,
+                                screenName: 'DeletedMemosScreen',
+                                action: '메모 복원',
+                                userId: widget.user.id,
+                              );
                             }
                           }
                         },
@@ -357,10 +371,17 @@ class _DeletedMemosScreenState extends State<DeletedMemosScreen> {
                               );
                               _loadDeletedMemos();
                             }
-                          } catch (e) {
+                          } catch (e, stackTrace) {
                             if (context.mounted) {
                               Navigator.pop(context);
-                              AppMessageHandler.handleApiError(context, e);
+                              await AppMessageHandler.handleErrorWithLogging(
+                                context,
+                                e,
+                                stackTrace,
+                                screenName: 'DeletedMemosScreen',
+                                action: '메모 영구 삭제',
+                                userId: widget.user.id,
+                              );
                             }
                           }
                         },

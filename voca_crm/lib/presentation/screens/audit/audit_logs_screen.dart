@@ -148,11 +148,21 @@ class _AuditLogsScreenState extends State<AuditLogsScreen>
         _hasMore = _currentPage < _totalPages - 1;
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
       setState(() {
         _isLoading = false;
         _error = AppMessageHandler.parseErrorMessage(e);
       });
+      if (mounted) {
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'AuditLogsScreen',
+          action: '활동 로그 조회',
+          userId: widget.user.id,
+        );
+      }
     }
   }
 
@@ -195,10 +205,20 @@ class _AuditLogsScreenState extends State<AuditLogsScreen>
         _userStats = results[1] as UserActivityStatistics;
         _isStatsLoading = false;
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
       setState(() {
         _isStatsLoading = false;
       });
+      if (mounted) {
+        await AppMessageHandler.handleErrorWithLogging(
+          context,
+          e,
+          stackTrace,
+          screenName: 'AuditLogsScreen',
+          action: '활동 통계 조회',
+          userId: widget.user.id,
+        );
+      }
     }
   }
 

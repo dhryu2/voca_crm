@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:voca_crm/core/error/app_exception.dart';
 import 'package:voca_crm/core/error/exception_parser.dart';
 import 'package:voca_crm/core/theme/theme_color.dart';
+import 'package:voca_crm/data/datasource/error_log_service.dart';
+import 'package:voca_crm/domain/entity/error_log.dart';
 
 import 'haptic_helper.dart';
 
@@ -464,13 +466,19 @@ class AppMessageHandler {
   }
 
   /// Handle API errors and show appropriate UI
+  ///
+  /// 이 메서드는 기본적인 오류 처리만 수행합니다.
+  /// 예기치 못한 오류 로깅이 필요한 경우 [handleErrorWithLogging]을 사용하세요.
   static void handleApiError(
     BuildContext context,
     dynamic error, {
     VoidCallback? onRetry,
   }) {
-    final message = parseErrorMessage(error);
-    showErrorSnackBar(context, message);
+    // AppException으로 변환하여 userMessage 사용
+    final appException = error is AppException
+        ? error
+        : ExceptionParser.fromException(error);
+    showErrorSnackBar(context, appException.userMessage);
   }
 
   /// Parse error message from exception
@@ -755,5 +763,123 @@ class AppMessageHandler {
       onRetry: onRetry,
       onLogin: onLogin,
     );
+  }
+
+  /// 예기치 못한 오류를 서버에 로깅하고 사용자에게 표시
+  ///
+  /// [screenName]: 오류가 발생한 화면 이름
+  /// [action]: 수행 중이던 작업 (예: "사업장 생성", "회원 조회")
+  /// [userId]: 현재 사용자 ID (선택)
+  /// [businessPlaceId]: 현재 사업장 ID (선택)
+  static Future<void> handleUnexpectedError(
+    BuildContext context,
+    dynamic error,
+    StackTrace? stackTrace, {
+    required String screenName,
+    String? action,
+    String? userId,
+    String? businessPlaceId,
+  }) async {
+    // AppException으로 변환
+    final appException = error is AppException
+        ? error
+        : ExceptionParser.fromException(error, stackTrace);
+
+    // UnknownException이거나 ServerException인 경우 서버에 로깅
+    if (appException is UnknownException || appException is ServerException) {
+      try {
+        await ErrorLogService.instance.logException(
+          userId: userId,
+          businessPlaceId: businessPlaceId,
+          screenName: screenName,
+          action: action,
+          exception: error,
+          stackTrace: stackTrace,
+          severity: appException is ServerException
+              ? ErrorSeverity.critical
+              : ErrorSeverity.error,
+        );
+      } catch (logError) {
+        // 로그 전송 실패 시 무시 (콘솔에만 출력)
+        debugPrint('Failed to log error: $logError');
+      }
+    }
+
+    // 사용자에게 에러 메시지 표시
+    if (context.mounted) {
+      await showErrorSnackBar(context, appException.userMessage);
+    }
+  }
+
+  /// catch 블록에서 사용하기 위한 간편 메서드
+  ///
+  /// 사용 예:
+  /// ```dart
+  /// try {
+  ///   await someOperation();
+  /// } catch (e, stackTrace) {
+  ///   AppMessageHandler.handleErrorWithLogging(
+  ///     context, e, stackTrace,
+  ///     screenName: 'BusinessPlaceManagement',
+  ///     action: '사업장 생성',
+  ///   );
+  /// }
+  /// ```
+  static Future<void> handleErrorWithLogging(
+    BuildContext context,
+    dynamic error,
+    StackTrace? stackTrace, {
+    required String screenName,
+    String? action,
+    String? userId,
+    String? businessPlaceId,
+    bool showSnackbar = true,
+  }) async {
+    final appException = error is AppException
+        ? error
+        : ExceptionParser.fromException(error, stackTrace);
+
+    // 의도된 비즈니스 예외가 아닌 경우에만 로깅
+    // BadRequestException, ForbiddenException 등은 의도된 예외이므로 로깅하지 않음
+    final shouldLog = appException is UnknownException ||
+        appException is ServerException ||
+        appException is BadGatewayException ||
+        appException is ServiceUnavailableException ||
+        appException is GatewayTimeoutException;
+
+    if (shouldLog) {
+      try {
+        await ErrorLogService.instance.logException(
+          userId: userId,
+          businessPlaceId: businessPlaceId,
+          screenName: screenName,
+          action: action,
+          exception: error,
+          stackTrace: stackTrace,
+          severity: _getSeverity(appException),
+        );
+      } catch (logError) {
+        debugPrint('Failed to log error: $logError');
+      }
+    }
+
+    // 사용자에게 에러 메시지 표시
+    if (showSnackbar && context.mounted) {
+      await showErrorSnackBar(context, appException.userMessage);
+    }
+  }
+
+  /// 예외 타입에 따른 심각도 반환
+  static ErrorSeverity _getSeverity(AppException error) {
+    if (error is ServerException || error is BadGatewayException) {
+      return ErrorSeverity.critical;
+    }
+    if (error is ServiceUnavailableException || error is GatewayTimeoutException) {
+      return ErrorSeverity.critical;
+    }
+    if (error is UnknownException) {
+      return ErrorSeverity.error;
+    }
+    return ErrorSeverity.warning;
   }
 }

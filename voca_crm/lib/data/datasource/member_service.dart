@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
 
+import 'package:voca_crm/core/error/exception_parser.dart';
 import 'package:voca_crm/core/network/api_client.dart';
 import 'package:voca_crm/data/model/member_model.dart';
 
@@ -156,9 +157,20 @@ class MemberService {
       if (businessPlaceId != null) 'X-Business-Place-Id': businessPlaceId,
     };
 
+    // API가 기대하는 MemberUpdateRequest 필드만 전송
+    final requestBody = {
+      'memberNumber': member.memberNumber,
+      'name': member.name,
+      if (member.phone != null) 'phone': member.phone,
+      if (member.email != null) 'email': member.email,
+      if (userId != null) 'lastModifiedById': userId,
+      if (member.grade != null) 'grade': member.grade,
+      if (member.remark != null) 'remark': member.remark,
+    };
+
     final response = await _apiClient.put(
       '/api/members/${member.id}',
-      body: member.toJson(),
+      body: requestBody,
       additionalHeaders: additionalHeaders.isNotEmpty ? additionalHeaders : null,
     );
 
@@ -166,10 +178,7 @@ class MemberService {
       final data = jsonDecode(response.body);
       return MemberModel.fromJson(data);
     } else {
-      final errorData = jsonDecode(response.body);
-      throw MemberServiceException(
-        errorData['message'] ?? '회원 수정 중 오류가 발생했습니다.',
-      );
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 

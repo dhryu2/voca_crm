@@ -263,12 +263,17 @@ class _VisitsScreenState extends State<VisitsScreen>
           '${checkIn.member.name}님의 체크인이 취소되었습니다.',
         );
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (mounted) {
         HapticHelper.error();
-        AppMessageHandler.showErrorSnackBar(
+        await AppMessageHandler.handleErrorWithLogging(
           context,
-          '체크인 취소 실패: ${AppMessageHandler.parseErrorMessage(e)}',
+          e,
+          stackTrace,
+          screenName: 'VisitsScreen',
+          action: '체크인 취소',
+          userId: widget.user.id,
+          businessPlaceId: _selectedBusinessPlaceId,
         );
       }
     }
@@ -321,12 +326,21 @@ class _VisitsScreenState extends State<VisitsScreen>
         _filteredMembers = members;
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
         _error = AppMessageHandler.parseErrorMessage(e);
       });
+      await AppMessageHandler.handleErrorWithLogging(
+        context,
+        e,
+        stackTrace,
+        screenName: 'VisitsScreen',
+        action: '회원 목록 조회',
+        userId: widget.user.id,
+        businessPlaceId: _selectedBusinessPlaceId,
+      );
     }
   }
 
@@ -627,12 +641,17 @@ class _VisitsScreenState extends State<VisitsScreen>
           HapticHelper.success();
           _showCheckInSuccessDialog(member, visit);
         }
-      } catch (e) {
+      } catch (e, stackTrace) {
         if (mounted) {
           HapticHelper.error();
-          AppMessageHandler.showErrorSnackBar(
+          await AppMessageHandler.handleErrorWithLogging(
             context,
-            '체크인 실패: ${AppMessageHandler.parseErrorMessage(e)}',
+            e,
+            stackTrace,
+            screenName: 'VisitsScreen',
+            action: '체크인',
+            userId: widget.user.id,
+            businessPlaceId: _selectedBusinessPlaceId,
           );
         }
       }

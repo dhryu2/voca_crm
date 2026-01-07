@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:voca_crm/core/error/exception_parser.dart';
 import 'package:voca_crm/core/network/api_client.dart';
 import 'package:voca_crm/data/model/memo_model.dart';
 
@@ -118,9 +119,16 @@ class MemoService {
       additionalHeaders['X-Business-Place-Id'] = businessPlaceId;
     }
 
+    // API가 기대하는 MemoUpdateRequest 필드만 전송
+    final requestBody = {
+      'content': memo.content,
+      if (userId != null) 'lastModifiedById': userId,
+      'isImportant': memo.isImportant,
+    };
+
     final response = await _apiClient.put(
       '/api/memos/${memo.id}',
-      body: memo.toJson(),
+      body: requestBody,
       additionalHeaders: additionalHeaders.isNotEmpty
           ? additionalHeaders
           : null,
@@ -130,8 +138,7 @@ class MemoService {
       final data = jsonDecode(response.body);
       return MemoModel.fromJson(data);
     } else {
-      final errorData = jsonDecode(response.body);
-      throw MemoServiceException(errorData['message'] ?? '메모 수정 중 오류가 발생했습니다.');
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 

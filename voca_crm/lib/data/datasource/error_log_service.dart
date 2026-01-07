@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:voca_crm/core/network/api_client.dart';
+import 'package:voca_crm/core/error/exception_parser.dart';
 import 'package:voca_crm/domain/entity/error_log.dart';
 
 /// 오류 로그 서비스
@@ -169,7 +170,7 @@ class ErrorLogService {
     if (response.statusCode == 200) {
       return ErrorLogPage.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(_extractErrorMessage(response.body, '오류 로그를 불러오는데 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -180,7 +181,7 @@ class ErrorLogService {
     if (response.statusCode == 200) {
       return ErrorLog.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(_extractErrorMessage(response.body, '오류 로그 상세 정보를 불러오는데 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -198,7 +199,7 @@ class ErrorLogService {
     if (response.statusCode == 200) {
       return ErrorLogPage.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(_extractErrorMessage(response.body, '사업장 오류 로그를 불러오는데 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -212,7 +213,7 @@ class ErrorLogService {
     if (response.statusCode == 200) {
       return ErrorLogPage.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(_extractErrorMessage(response.body, '미해결 오류 로그를 불러오는데 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -245,7 +246,7 @@ class ErrorLogService {
     if (response.statusCode == 200) {
       return ErrorLogPage.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(_extractErrorMessage(response.body, '오류 로그 검색에 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -261,7 +262,7 @@ class ErrorLogService {
     if (response.statusCode == 200) {
       return ErrorLog.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(_extractErrorMessage(response.body, '오류 해결 처리에 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -272,7 +273,7 @@ class ErrorLogService {
     if (response.statusCode == 200) {
       return ErrorLog.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(_extractErrorMessage(response.body, '오류 미해결 처리에 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -288,7 +289,7 @@ class ErrorLogService {
     if (response.statusCode == 200) {
       return ErrorSummary.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(_extractErrorMessage(response.body, '오류 통계 요약을 불러오는데 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
@@ -306,28 +307,11 @@ class ErrorLogService {
       final data = jsonDecode(response.body);
       return data['count'] as int;
     } else {
-      throw Exception(_extractErrorMessage(response.body, '미해결 오류 개수를 불러오는데 실패했습니다.'));
+      throw ExceptionParser.fromHttpResponse(response);
     }
   }
 
   // ==================== 헬퍼 메서드 ====================
-
-  /// API 응답에서 사용자 친화적 오류 메시지 추출
-  String _extractErrorMessage(String responseBody, String fallbackMessage) {
-    try {
-      final data = jsonDecode(responseBody);
-      if (data is Map<String, dynamic>) {
-        if (data['fieldErrors'] is Map && (data['fieldErrors'] as Map).isNotEmpty) {
-          final fieldErrors = data['fieldErrors'] as Map;
-          return fieldErrors.values.first.toString();
-        }
-        if (data['message'] != null && data['message'].toString().isNotEmpty) {
-          return data['message'].toString();
-        }
-      }
-    } catch (_) {}
-    return fallbackMessage;
-  }
 
   /// 비동기 로그 전송 (fire-and-forget)
   Future<void> _sendLogAsync(Map<String, dynamic> body) async {
