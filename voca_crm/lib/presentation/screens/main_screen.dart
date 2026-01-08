@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -79,7 +80,9 @@ class _MainScreenState extends State<MainScreen> {
       },
       onError: (error) {
         // 스트림 에러 로깅 (크래시 방지)
-        debugPrint('[MainScreen] BusinessPlaceChangeNotifier stream error: $error');
+        if (kDebugMode) {
+          debugPrint('[MainScreen] BusinessPlaceChangeNotifier stream error: $error');
+        }
       },
     );
   }

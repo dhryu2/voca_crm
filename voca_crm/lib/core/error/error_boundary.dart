@@ -57,7 +57,9 @@ class GlobalErrorHandler {
     void Function(AppException error, StackTrace? stackTrace)? onAdditionalReport,
   }) {
     if (_initialized) {
-      debugPrint('[GlobalErrorHandler] Already initialized');
+      if (kDebugMode) {
+        debugPrint('[GlobalErrorHandler] Already initialized');
+      }
       return;
     }
 
@@ -72,7 +74,9 @@ class GlobalErrorHandler {
     PlatformDispatcher.instance.onError = _handlePlatformError;
 
     _initialized = true;
-    debugPrint('[GlobalErrorHandler] Initialized');
+    if (kDebugMode) {
+      debugPrint('[GlobalErrorHandler] Initialized');
+    }
   }
 
   /// Flutter 프레임워크 에러 처리

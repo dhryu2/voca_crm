@@ -71,6 +71,7 @@ public class StatisticsService {
 
     /**
      * 오늘의 예약 일정 조회
+     * N+1 최적화: findByBusinessPlaceIdAndReservationDateWithMember()로 Member를 함께 로드
      */
     public List<TodayScheduleDTO> getTodaySchedule(String businessPlaceId, Integer limit) {
         if (limit == null || limit <= 0) {
@@ -78,8 +79,9 @@ public class StatisticsService {
         }
 
         LocalDate today = LocalDate.now();
+        // N+1 방지: Member를 FETCH JOIN으로 함께 로드
         List<Reservation> reservations = reservationRepository
-                .findByBusinessPlaceIdAndReservationDateOrderByReservationTimeAsc(businessPlaceId, today);
+                .findByBusinessPlaceIdAndReservationDateWithMember(businessPlaceId, today);
 
         // PENDING, CONFIRMED 상태만 필터링하고 limit 적용
         final int finalLimit = limit;

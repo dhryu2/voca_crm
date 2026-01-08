@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:voca_crm/core/notification/business_place_change_notifier.dart';
 import 'package:voca_crm/core/theme/theme_color.dart';
@@ -61,7 +62,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
     super.initState();
     // Set default business place filter to user's default
     _selectedBusinessPlaceFilter = widget.user.defaultBusinessPlaceId;
-    debugPrint('[CustomersScreen] initState - defaultBusinessPlaceId: ${widget.user.defaultBusinessPlaceId}');
+    if (kDebugMode) {
+      debugPrint('[CustomersScreen] initState - defaultBusinessPlaceId: ${widget.user.defaultBusinessPlaceId}');
+    }
     _initializeData();
 
     // Listen to business place changes
@@ -76,7 +79,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
     await _loadBusinessPlaces();
     // If no business place filter is set but we have business places, use the first one
     if (_selectedBusinessPlaceFilter == null && _businessPlaces.isNotEmpty) {
-      debugPrint('[CustomersScreen] No default BP, using first from list: ${_businessPlaces.first.businessPlace.id}');
+      if (kDebugMode) {
+        debugPrint('[CustomersScreen] No default BP, using first from list: ${_businessPlaces.first.businessPlace.id}');
+      }
       setState(() {
         _selectedBusinessPlaceFilter = _businessPlaces.first.businessPlace.id;
       });
@@ -107,12 +112,16 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   Future<void> _loadMembers() async {
-    debugPrint('[CustomersScreen] _loadMembers called');
-    debugPrint('[CustomersScreen] _selectedBusinessPlaceFilter: $_selectedBusinessPlaceFilter');
-    debugPrint('[CustomersScreen] user.defaultBusinessPlaceId: ${widget.user.defaultBusinessPlaceId}');
+    if (kDebugMode) {
+      debugPrint('[CustomersScreen] _loadMembers called');
+      debugPrint('[CustomersScreen] _selectedBusinessPlaceFilter: $_selectedBusinessPlaceFilter');
+      debugPrint('[CustomersScreen] user.defaultBusinessPlaceId: ${widget.user.defaultBusinessPlaceId}');
+    }
 
     if (_selectedBusinessPlaceFilter == null) {
-      debugPrint('[CustomersScreen] _selectedBusinessPlaceFilter is null, returning');
+      if (kDebugMode) {
+        debugPrint('[CustomersScreen] _selectedBusinessPlaceFilter is null, returning');
+      }
       setState(() => _isLoading = false);
       return;
     }
@@ -121,11 +130,15 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
     try {
       // Server-side filtering by business place
-      debugPrint('[CustomersScreen] Calling getMembersByBusinessPlace with: $_selectedBusinessPlaceFilter');
+      if (kDebugMode) {
+        debugPrint('[CustomersScreen] Calling getMembersByBusinessPlace with: $_selectedBusinessPlaceFilter');
+      }
       final members = await _memberRepository.getMembersByBusinessPlace(
         _selectedBusinessPlaceFilter!,
       );
-      debugPrint('[CustomersScreen] Got ${members.length} members from API');
+      if (kDebugMode) {
+        debugPrint('[CustomersScreen] Got ${members.length} members from API');
+      }
       if (!mounted) return;
       setState(() {
         _members = members;
@@ -135,7 +148,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
       // Client-side filtering for other criteria
       _applyFilters();
     } catch (e, stackTrace) {
-      debugPrint('[CustomersScreen] Error loading members: $e');
+      if (kDebugMode) {
+        debugPrint('[CustomersScreen] Error loading members: $e');
+      }
       if (!mounted) return;
       setState(() => _isLoading = false);
       if (mounted) {
