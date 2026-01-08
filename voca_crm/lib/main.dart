@@ -77,7 +77,9 @@ void main() async {
       GlobalErrorHandler.instance.initialize(
         onAuthenticationFailed: _navigateToLogin,
         onNetworkError: (error) {
-          debugPrint('[NetworkError] ${error.userMessage}');
+          if (kDebugMode) {
+            debugPrint('[NetworkError] ${error.userMessage}');
+          }
         },
       );
 
@@ -103,7 +105,9 @@ void main() async {
 
       // TokenManager 콜백 초기화 (토큰 갱신 성공 시)
       app_token.TokenManager.instance.onTokensRefreshed = (tokens) {
-        debugPrint('[TokenManager] Tokens refreshed successfully');
+        if (kDebugMode) {
+          debugPrint('[TokenManager] Tokens refreshed successfully');
+        }
       };
 
       runApp(const RootApp());

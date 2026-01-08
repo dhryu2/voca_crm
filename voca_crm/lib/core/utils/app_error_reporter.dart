@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:voca_crm/data/datasource/error_log_service.dart';
 import 'package:voca_crm/domain/entity/error_log.dart';
 
@@ -80,7 +81,9 @@ class AppErrorReporter {
       );
     } catch (e) {
       // 오류 보고 실패 시 무시 (무한 루프 방지)
-      print('Failed to report error: $e');
+      if (kDebugMode) {
+        debugPrint('Failed to report error: $e');
+      }
     }
   }
 

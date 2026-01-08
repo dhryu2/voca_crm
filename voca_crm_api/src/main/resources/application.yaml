@@ -177,9 +177,10 @@ rate-limit:
     period-seconds: 60
 
 # AI 서버 설정 (Ollama)
+# 주의: 운영 환경에서는 반드시 HTTPS를 사용하세요
 ai:
   server:
-    url: ${AI_SERVER_URL:http://100.76.182.77:11434}
+    url: ${AI_SERVER_URL:https://localhost:11434}  # 운영: HTTPS 필수
     model: ${AI_MODEL_NAME:voca-crm}
     timeout: 30000                     # AI 서버 응답 타임아웃 (30초)
   daily-limit:
@@ -200,13 +201,14 @@ app:
   system-admin-ids: ${SYSTEM_ADMIN_IDS:admin}
 
 # OpenAPI/Swagger 설정
+# 주의: 운영 환경에서는 ENABLE_SWAGGER_UI=false로 설정하세요
 springdoc:
   api-docs:
     path: /v3/api-docs                   # OpenAPI JSON 경로
-    enabled: true                        # API 문서 활성화
+    enabled: ${ENABLE_API_DOCS:false}    # 운영: false (기본값)
   swagger-ui:
     path: /swagger-ui.html               # Swagger UI 경로
-    enabled: true                        # Swagger UI 활성화
+    enabled: ${ENABLE_SWAGGER_UI:false}  # 운영: false (기본값)
     tags-sorter: alpha                   # 태그 알파벳순 정렬
     operations-sorter: method            # HTTP 메서드순 정렬
     display-request-duration: true       # 요청 소요 시간 표시

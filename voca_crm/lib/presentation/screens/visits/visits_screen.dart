@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:voca_crm/core/notification/business_place_change_notifier.dart';
@@ -96,7 +97,9 @@ class _VisitsScreenState extends State<VisitsScreen>
       });
     } catch (e) {
       // Silent fail - 오늘 방문 목록은 필수가 아님
-      debugPrint('[VisitsScreen] Failed to load today visits: $e');
+      if (kDebugMode) {
+        debugPrint('[VisitsScreen] Failed to load today visits: $e');
+      }
     }
   }
 

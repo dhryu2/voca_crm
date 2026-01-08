@@ -45,6 +45,20 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
     );
 
     /**
+     * 사업장 ID와 날짜로 예약 목록 조회 (Member 포함 - N+1 방지)
+     * StatisticsService.getTodaySchedule()에서 사용
+     */
+    @Query("SELECT r FROM Reservation r " +
+           "LEFT JOIN FETCH r.member " +
+           "WHERE r.businessPlaceId = :businessPlaceId " +
+           "AND r.reservationDate = :reservationDate " +
+           "ORDER BY r.reservationTime ASC")
+    List<Reservation> findByBusinessPlaceIdAndReservationDateWithMember(
+            @Param("businessPlaceId") String businessPlaceId,
+            @Param("reservationDate") LocalDate reservationDate
+    );
+
+    /**
      * 사업장 ID와 날짜 범위로 예약 목록 조회
      */
     @Query("SELECT r FROM Reservation r WHERE r.businessPlaceId = :businessPlaceId " +
