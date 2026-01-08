@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart';
-
 import '../error/app_exception.dart';
 import 'network_monitor.dart';
 

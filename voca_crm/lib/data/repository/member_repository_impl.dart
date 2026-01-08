@@ -151,8 +151,4 @@ class MemberRepositoryImpl implements MemberRepository {
       businessPlaceId: businessPlaceId,
     );
   }
-
-  static MemberModel _modelFromEntity(Member entity) {
-    return MemberModel.fromEntity(entity);
-  }
 }

@@ -1,7 +1,11 @@
 package com.vocacrm.api.controller;
 
+import com.vocacrm.api.dto.request.NoticeCreateRequest;
+import com.vocacrm.api.dto.request.NoticeUpdateRequest;
+import com.vocacrm.api.dto.request.NoticeViewRequest;
 import com.vocacrm.api.model.Notice;
 import com.vocacrm.api.service.NoticeService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -92,12 +96,12 @@ public class NoticeController {
     @PostMapping("/notices/{noticeId}/view")
     public ResponseEntity<Map<String, String>> recordView(
             @PathVariable String noticeId,
-            @RequestBody Map<String, Object> requestBody) {
+            @Valid @RequestBody NoticeViewRequest request) {
 
-        String userId = (String) requestBody.get("userId");
-        Boolean doNotShowAgain = (Boolean) requestBody.get("doNotShowAgain");
-
-        noticeService.recordView(userId, noticeId, doNotShowAgain != null && doNotShowAgain);
+        noticeService.recordView(
+                request.getUserId(),
+                noticeId,
+                request.getDoNotShowAgain() != null && request.getDoNotShowAgain());
 
         return ResponseEntity.ok(Map.of("message", "View recorded successfully"));
     }
@@ -178,9 +182,22 @@ public class NoticeController {
      */
     @PostMapping("/admin/notices")
     public ResponseEntity<Notice> createNotice(
-            @RequestBody Notice notice,
+            @Valid @RequestBody NoticeCreateRequest request,
             jakarta.servlet.http.HttpServletRequest servletRequest) {
         Boolean isSystemAdmin = (Boolean) servletRequest.getAttribute("isSystemAdmin");
+        String userId = (String) servletRequest.getAttribute("userId");
+
+        Notice notice = new Notice();
+        notice.setTitle(request.getTitle());
+        notice.setContent(request.getContent());
+        notice.setStartDate(request.getStartDate());
+        notice.setEndDate(request.getEndDate());
+        notice.setPriority(request.getPriority() != null ? request.getPriority() : 0);
+        notice.setIsActive(request.getIsActive() != null ? request.getIsActive() : true);
+        if (userId != null) {
+            notice.setCreatedByUserId(java.util.UUID.fromString(userId));
+        }
+
         Notice created = noticeService.createNotice(notice, isSystemAdmin);
         return ResponseEntity.ok(created);
     }
@@ -204,9 +221,18 @@ public class NoticeController {
     @PutMapping("/admin/notices/{id}")
     public ResponseEntity<Notice> updateNotice(
             @PathVariable String id,
-            @RequestBody Notice noticeDetails,
+            @Valid @RequestBody NoticeUpdateRequest request,
             jakarta.servlet.http.HttpServletRequest servletRequest) {
         Boolean isSystemAdmin = (Boolean) servletRequest.getAttribute("isSystemAdmin");
+
+        Notice noticeDetails = new Notice();
+        noticeDetails.setTitle(request.getTitle());
+        noticeDetails.setContent(request.getContent());
+        noticeDetails.setStartDate(request.getStartDate());
+        noticeDetails.setEndDate(request.getEndDate());
+        noticeDetails.setPriority(request.getPriority());
+        noticeDetails.setIsActive(request.getIsActive());
+
         Notice updated = noticeService.updateNotice(id, noticeDetails, isSystemAdmin);
         return ResponseEntity.ok(updated);
     }
