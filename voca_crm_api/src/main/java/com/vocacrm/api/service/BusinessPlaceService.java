@@ -71,7 +71,8 @@ public class BusinessPlaceService {
     @Transactional
     public CreateBusinessPlaceResponse createBusinessPlace(BusinessPlace businessPlace, String userId) {
         // Get user to check tier
-        User user = userRepository.findById(UUID.fromString(userId)).orElseThrow();
+        User user = userRepository.findById(UUID.fromString(userId))
+                .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다: " + userId));
 
         // Check business place limit based on tier
         int maxBusinessPlaces = getMaxBusinessPlaces(user.getTier());
@@ -334,7 +335,8 @@ public class BusinessPlaceService {
         userBusinessPlaceRepository.save(ubp);
 
         // Set as default business place if user doesn't have one
-        User user = userRepository.findById(request.getUserId()).orElseThrow();
+        User user = userRepository.findById(request.getUserId())
+                .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다: " + request.getUserId()));
         if (user.getDefaultBusinessPlaceId() == null) {
             user.setDefaultBusinessPlaceId(request.getBusinessPlaceId());
             userRepository.save(user);
@@ -460,7 +462,8 @@ public class BusinessPlaceService {
         userBusinessPlaceRepository.delete(ubp);
 
         // Clear default business place if it was the removed one
-        User user = userRepository.findById(UUID.fromString(userId)).orElseThrow();
+        User user = userRepository.findById(UUID.fromString(userId))
+                .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다: " + userId));
         if (businessPlaceId.equals(user.getDefaultBusinessPlaceId())) {
             user.setDefaultBusinessPlaceId(null);
             userRepository.save(user);

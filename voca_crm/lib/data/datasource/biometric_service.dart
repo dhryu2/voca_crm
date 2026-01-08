@@ -1,16 +1,13 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
-import 'package:voca_crm/core/auth/token_manager.dart';
 
 class BiometricService {
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
   final LocalAuthentication _localAuth = LocalAuthentication();
-  final TokenManager _tokenManager;
 
   static const String _biometricEnabledKey = 'biometric_enabled';
 
-  BiometricService({TokenManager? tokenManager})
-    : _tokenManager = tokenManager ?? TokenManager.instance;
+  BiometricService();
 
   Future<bool> isBiometricAvailable() async {
     try {

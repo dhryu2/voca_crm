@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:voca_crm/core/theme/theme_color.dart';
 import 'package:voca_crm/data/datasource/statistics_service.dart';
 
 /// 간단한 라인 차트 위젯

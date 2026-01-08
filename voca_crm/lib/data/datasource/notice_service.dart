@@ -51,8 +51,13 @@ class NoticeService {
           'doNotShowAgain': doNotShowAgain,
         },
       );
+
+      if (response.statusCode != 200) {
+        // Silent failure - non-critical operation
+        // 열람 기록 실패는 사용자 경험에 영향을 주지 않음
+      }
     } catch (e) {
-      // Error recording view
+      // Silent failure - non-critical operation
     }
   }
 

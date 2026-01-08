@@ -1,6 +1,7 @@
 package com.vocacrm.api.controller;
 
 import com.vocacrm.api.dto.request.ReservationCreateRequest;
+import com.vocacrm.api.dto.request.ReservationStatusUpdateRequest;
 import com.vocacrm.api.dto.request.ReservationUpdateRequest;
 import com.vocacrm.api.exception.AccessDeniedException;
 import com.vocacrm.api.model.AccessStatus;
@@ -315,7 +316,7 @@ public class ReservationController {
     @PatchMapping("/{id}/status")
     public ResponseEntity<Reservation> updateReservationStatus(
             @PathVariable String id,
-            @RequestBody Map<String, String> body,
+            @Valid @RequestBody ReservationStatusUpdateRequest request,
             jakarta.servlet.http.HttpServletRequest servletRequest) {
         String userId = (String) servletRequest.getAttribute("userId");
 
@@ -331,18 +332,10 @@ public class ReservationController {
             throw new AccessDeniedException("해당 예약에 대한 상태 변경 권한이 없습니다.");
         }
 
-        String statusStr = body.get("status");
-        if (statusStr == null) {
-            throw new IllegalArgumentException("status 필드가 필요합니다");
-        }
-
-        String updatedBy = body.get("updatedBy");
-
-        Reservation.ReservationStatus status = Reservation.ReservationStatus.valueOf(statusStr.toUpperCase());
         Reservation updated = reservationService.updateReservationStatus(
                 UUID.fromString(id),
-                status,
-                updatedBy != null ? UUID.fromString(updatedBy) : null);
+                request.getStatus(),
+                request.getUpdatedBy());
         return ResponseEntity.ok(updated);
     }
 

@@ -61,6 +61,13 @@ class NotificationService {
       '/api/notifications/token',
       body: {'fcmToken': fcmToken},
     );
+
+    // 200, 204 모두 성공으로 처리
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      // 로그아웃 흐름을 방해하지 않기 위해 예외를 throw하지 않음
+      // 서버에서 토큰이 이미 삭제되었거나 유효하지 않은 경우도 성공으로 처리
+      debugPrint('FCM 토큰 비활성화 실패: ${response.statusCode}');
+    }
   }
 
   /// 모든 토큰 비활성화 (모든 기기 로그아웃)
@@ -69,6 +76,12 @@ class NotificationService {
     final response = await _apiClient.delete(
       '/api/notifications/token/all',
     );
+
+    // 200, 204 모두 성공으로 처리
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      // 로그아웃 흐름을 방해하지 않기 위해 예외를 throw하지 않음
+      debugPrint('모든 FCM 토큰 비활성화 실패: ${response.statusCode}');
+    }
   }
 
   /// 알림 목록 조회
