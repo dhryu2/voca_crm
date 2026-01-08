@@ -13,8 +13,23 @@ class BusinessPlaceWithRole {
   });
 
   factory BusinessPlaceWithRole.fromJson(Map<String, dynamic> json) {
+    // 백엔드 BusinessPlaceWithRoleDTO는 플랫 구조로 응답:
+    // businessPlaceId, businessPlaceName, businessPlaceAddress, businessPlacePhone,
+    // businessPlaceCreatedAt, businessPlaceUpdatedAt, userRole, memberCount
+    final now = DateTime.now();
     return BusinessPlaceWithRole(
-      businessPlace: BusinessPlace.fromJson(json['businessPlace']),
+      businessPlace: BusinessPlace(
+        id: json['businessPlaceId'],
+        name: json['businessPlaceName'],
+        address: json['businessPlaceAddress'],
+        phone: json['businessPlacePhone'],
+        createdAt: json['businessPlaceCreatedAt'] != null
+            ? DateTime.parse(json['businessPlaceCreatedAt'])
+            : now,
+        updatedAt: json['businessPlaceUpdatedAt'] != null
+            ? DateTime.parse(json['businessPlaceUpdatedAt'])
+            : now,
+      ),
       userRole: Role.fromString(json['userRole']),
       memberCount: json['memberCount'] ?? 0,
     );
