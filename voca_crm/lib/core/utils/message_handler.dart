@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:another_flushbar/flushbar.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:voca_crm/core/error/app_exception.dart';
 import 'package:voca_crm/core/error/exception_parser.dart';
@@ -801,7 +802,9 @@ class AppMessageHandler {
         );
       } catch (logError) {
         // 로그 전송 실패 시 무시 (콘솔에만 출력)
-        debugPrint('Failed to log error: $logError');
+        if (kDebugMode) {
+          debugPrint('Failed to log error: $logError');
+        }
       }
     }
 
@@ -859,7 +862,9 @@ class AppMessageHandler {
           severity: _getSeverity(appException),
         );
       } catch (logError) {
-        debugPrint('Failed to log error: $logError');
+        if (kDebugMode) {
+          debugPrint('Failed to log error: $logError');
+        }
       }
     }
 

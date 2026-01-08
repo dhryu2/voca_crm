@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:voca_crm/core/network/api_client.dart';
 import 'package:voca_crm/core/error/exception_parser.dart';
@@ -96,7 +97,9 @@ class ErrorLogService {
       _sendLogAsync(body);
     } catch (e) {
       // 로그 전송 중 오류 발생 시 무시
-      print('Error in logError: $e');
+      if (kDebugMode) {
+        debugPrint('Error in logError: $e');
+      }
     }
   }
 
@@ -319,7 +322,9 @@ class ErrorLogService {
       await _apiClient.post('/api/error-logs', body: body);
     } catch (e) {
       // 오류 로그 전송 실패 시 콘솔에만 출력
-      print('Failed to send error log: $e');
+      if (kDebugMode) {
+        debugPrint('Failed to send error log: $e');
+      }
     }
   }
 

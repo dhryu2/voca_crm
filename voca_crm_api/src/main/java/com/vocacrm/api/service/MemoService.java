@@ -117,26 +117,19 @@ public class MemoService {
                 .orElseThrow(() -> new ResourceNotFoundException("회원을 찾을 수 없습니다"));
 
         // Get owner of business place to check tier
+        // N+1 최적화: findOwnersByBusinessPlaceId()로 직접 Owner User 조회 (기존 3쿼리 -> 1쿼리)
         if (member.getBusinessPlaceId() != null) {
-            List<UserBusinessPlace> owners = userBusinessPlaceRepository.findByBusinessPlaceIdAndStatus(
-                    member.getBusinessPlaceId(), AccessStatus.APPROVED);
+            List<User> ownerUsers = userBusinessPlaceRepository.findOwnersByBusinessPlaceId(member.getBusinessPlaceId());
 
-            UserBusinessPlace owner = owners.stream()
-                    .filter(ubp -> ubp.getRole() == Role.OWNER)
-                    .findFirst()
-                    .orElse(null);
+            if (!ownerUsers.isEmpty()) {
+                User ownerUser = ownerUsers.get(0); // 일반적으로 사업장당 Owner는 1명
+                // Race Condition 방지: SERIALIZABLE 격리 수준 + 비관적 잠금으로 동시성 제어
+                int maxMemos = getMaxMemos(ownerUser.getTier());
+                long currentCount = memoRepository.countByMemberIdAndBusinessPlaceIdAndIsDeletedFalseWithLock(
+                        memo.getMemberId(), member.getBusinessPlaceId());
 
-            if (owner != null) {
-                User ownerUser = userRepository.findById(owner.getUserId()).orElse(null);
-                if (ownerUser != null) {
-                    // Race Condition 방지: SERIALIZABLE 격리 수준 + 비관적 잠금으로 동시성 제어
-                    int maxMemos = getMaxMemos(ownerUser.getTier());
-                    long currentCount = memoRepository.countByMemberIdAndBusinessPlaceIdAndIsDeletedFalseWithLock(
-                            memo.getMemberId(), member.getBusinessPlaceId());
-
-                    if (currentCount >= maxMemos) {
-                        throw new BusinessException("메모 개수 제한을 초과했습니다. 최대 " + maxMemos + "개까지 등록 가능합니다.", "MEMO_LIMIT_EXCEEDED");
-                    }
+                if (currentCount >= maxMemos) {
+                    throw new BusinessException("메모 개수 제한을 초과했습니다. 최대 " + maxMemos + "개까지 등록 가능합니다.", "MEMO_LIMIT_EXCEEDED");
                 }
             }
         }
@@ -172,13 +165,10 @@ public class MemoService {
         Member member = memberRepository.findById(memo.getMemberId())
                 .orElseThrow(() -> new ResourceNotFoundException("회원을 찾을 수 없습니다"));
 
+        // N+1 최적화: 가장 오래된 메모만 직접 조회 (기존: 모든 메모 조회 후 마지막 요소 삭제)
         // Delete oldest memo first (삭제되지 않은 메모 중)
-        List<Memo> memos = memoRepository.findByMemberIdAndBusinessPlaceIdAndIsDeletedFalseOrderByCreatedAtDesc(
-                memo.getMemberId(), member.getBusinessPlaceId());
-        if (!memos.isEmpty()) {
-            // Delete the oldest (last in DESC order)
-            memoRepository.delete(memos.get(memos.size() - 1));
-        }
+        memoRepository.findOldestByMemberIdAndBusinessPlaceId(memo.getMemberId(), member.getBusinessPlaceId())
+                .ifPresent(memoRepository::delete);
 
         // Then create new memo
         return createMemo(memo);

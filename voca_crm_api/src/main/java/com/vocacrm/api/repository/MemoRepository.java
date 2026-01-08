@@ -295,4 +295,22 @@ public interface MemoRepository extends JpaRepository<Memo, UUID> {
     @Modifying
     @Query("DELETE FROM Memo m WHERE m.memberId IN :memberIds")
     int deleteAllByMemberIds(@Param("memberIds") List<UUID> memberIds);
+
+    // ===== N+1 최적화를 위한 메서드 =====
+
+    /**
+     * 삭제되지 않은 가장 오래된 메모 조회 (회원별, 사업장 필터링 포함)
+     * createMemoWithOldestDeletion()에서 사용 - 모든 메모를 조회하지 않고 가장 오래된 것만 조회
+     */
+    @Query(value = "SELECT m.* FROM memos m " +
+           "JOIN members mem ON m.member_id = mem.id " +
+           "WHERE m.member_id = :memberId " +
+           "AND mem.business_place_id = :businessPlaceId " +
+           "AND m.is_deleted = false " +
+           "ORDER BY COALESCE(m.updated_at, m.created_at) ASC " +
+           "LIMIT 1", nativeQuery = true)
+    Optional<Memo> findOldestByMemberIdAndBusinessPlaceId(
+            @Param("memberId") UUID memberId,
+            @Param("businessPlaceId") String businessPlaceId
+    );
 }

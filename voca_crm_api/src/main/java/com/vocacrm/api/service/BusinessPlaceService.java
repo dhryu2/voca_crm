@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -119,12 +120,35 @@ public class BusinessPlaceService {
 
     public List<BusinessPlaceWithRoleDTO> getMyBusinessPlaces(String userId) {
         List<UserBusinessPlace> ubps = userBusinessPlaceRepository.findByUserIdAndStatus(UUID.fromString(userId), AccessStatus.APPROVED);
+
+        if (ubps.isEmpty()) {
+            return List.of();
+        }
+
+        // N+1 방지: 모든 사업장 ID를 한 번에 조회
+        List<String> businessPlaceIds = ubps.stream()
+                .map(UserBusinessPlace::getBusinessPlaceId)
+                .toList();
+
+        // 1. 모든 사업장 정보를 한 번에 조회
+        Map<String, BusinessPlace> businessPlaceMap = businessPlaceRepository.findAllById(businessPlaceIds)
+                .stream()
+                .collect(Collectors.toMap(BusinessPlace::getId, bp -> bp));
+
+        // 2. 모든 사업장의 회원 수를 한 번에 조회
+        Map<String, Long> memberCountMap = userBusinessPlaceRepository.countMembersGroupByBusinessPlaceId(businessPlaceIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        row -> (String) row[0],
+                        row -> (Long) row[1]
+                ));
+
+        // 3. DTO 생성 (추가 쿼리 없음)
         return ubps.stream()
                 .map(ubp -> {
-                    BusinessPlace bp = businessPlaceRepository.findById(ubp.getBusinessPlaceId()).orElse(null);
+                    BusinessPlace bp = businessPlaceMap.get(ubp.getBusinessPlaceId());
                     if (bp == null) return null;
-                    int memberCount = (int) userBusinessPlaceRepository.countByBusinessPlaceIdAndStatus(
-                            ubp.getBusinessPlaceId(), AccessStatus.APPROVED);
+                    int memberCount = memberCountMap.getOrDefault(ubp.getBusinessPlaceId(), 0L).intValue();
                     return new BusinessPlaceWithRoleDTO(bp, ubp.getRole(), memberCount);
                 })
                 .filter(dto -> dto != null)
@@ -250,13 +274,36 @@ public class BusinessPlaceService {
     public List<AccessRequestWithRequesterDTO> getReceivedRequestsWithRequester(String userId) {
         List<BusinessPlaceAccessRequest> requests = getReceivedRequests(userId);
 
+        if (requests.isEmpty()) {
+            return List.of();
+        }
+
+        // N+1 방지: 모든 요청자 ID와 사업장 ID를 한 번에 수집
+        List<UUID> requesterIds = requests.stream()
+                .map(BusinessPlaceAccessRequest::getUserId)
+                .distinct()
+                .toList();
+
+        List<String> businessPlaceIds = requests.stream()
+                .map(BusinessPlaceAccessRequest::getBusinessPlaceId)
+                .distinct()
+                .toList();
+
+        // 1. 모든 요청자 정보를 한 번에 조회
+        Map<UUID, User> requesterMap = userRepository.findAllById(requesterIds)
+                .stream()
+                .collect(Collectors.toMap(User::getId, user -> user));
+
+        // 2. 모든 사업장 정보를 한 번에 조회
+        Map<String, BusinessPlace> businessPlaceMap = businessPlaceRepository.findAllById(businessPlaceIds)
+                .stream()
+                .collect(Collectors.toMap(BusinessPlace::getId, bp -> bp));
+
+        // 3. DTO 생성 (추가 쿼리 없음)
         return requests.stream()
                 .map(request -> {
-                    // 요청자 정보 조회
-                    User requester = userRepository.findById(request.getUserId()).orElse(null);
-                    // 사업장 정보 조회
-                    BusinessPlace businessPlace = businessPlaceRepository.findById(request.getBusinessPlaceId()).orElse(null);
-
+                    User requester = requesterMap.get(request.getUserId());
+                    BusinessPlace businessPlace = businessPlaceMap.get(request.getBusinessPlaceId());
                     return AccessRequestWithRequesterDTO.from(request, requester, businessPlace);
                 })
                 .collect(Collectors.toList());

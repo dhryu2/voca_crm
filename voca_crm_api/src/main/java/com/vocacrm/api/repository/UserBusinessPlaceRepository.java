@@ -55,4 +55,26 @@ public interface UserBusinessPlaceRepository extends JpaRepository<UserBusinessP
            "AND ubp.role = 'STAFF' " +
            "AND ubp.status = 'APPROVED'")
     List<UUID> findStaffUserIdsByBusinessPlaceId(@Param("businessPlaceId") String businessPlaceId);
+
+    // ===== N+1 최적화를 위한 배치 쿼리 메서드 =====
+
+    /**
+     * 여러 사업장의 회원 수를 한 번에 조회 (N+1 방지)
+     * @return Object[0]: businessPlaceId, Object[1]: count
+     */
+    @Query("SELECT ubp.businessPlaceId, COUNT(ubp) FROM UserBusinessPlace ubp " +
+           "WHERE ubp.businessPlaceId IN :businessPlaceIds " +
+           "AND ubp.status = 'APPROVED' " +
+           "GROUP BY ubp.businessPlaceId")
+    List<Object[]> countMembersGroupByBusinessPlaceId(@Param("businessPlaceIds") List<String> businessPlaceIds);
+
+    /**
+     * 특정 사업장의 Owner 사용자 정보를 한 번에 조회 (푸시 알림용)
+     */
+    @Query("SELECT u FROM User u " +
+           "JOIN UserBusinessPlace ubp ON u.id = ubp.userId " +
+           "WHERE ubp.businessPlaceId = :businessPlaceId " +
+           "AND ubp.role = 'OWNER' " +
+           "AND ubp.status = 'APPROVED'")
+    List<com.vocacrm.api.model.User> findOwnersByBusinessPlaceId(@Param("businessPlaceId") String businessPlaceId);
 }
