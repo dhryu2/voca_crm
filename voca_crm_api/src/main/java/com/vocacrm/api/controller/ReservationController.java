@@ -332,10 +332,13 @@ public class ReservationController {
             throw new AccessDeniedException("해당 예약에 대한 상태 변경 권한이 없습니다.");
         }
 
+        UUID updatedByUuid = request.getUpdatedBy() != null
+                ? UUID.fromString(request.getUpdatedBy())
+                : null;
         Reservation updated = reservationService.updateReservationStatus(
                 UUID.fromString(id),
                 request.getStatus(),
-                request.getUpdatedBy());
+                updatedByUuid);
         return ResponseEntity.ok(updated);
     }
 
