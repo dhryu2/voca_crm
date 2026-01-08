@@ -118,6 +118,7 @@ public class ErrorLog {
      */
     @Enumerated(EnumType.STRING)
     @Column(name = "severity", length = 20, nullable = false)
+    @lombok.Builder.Default
     private ErrorSeverity severity = ErrorSeverity.ERROR;
 
     /**
@@ -148,6 +149,7 @@ public class ErrorLog {
      * 해결 여부
      */
     @Column(name = "resolved", nullable = false)
+    @lombok.Builder.Default
     private Boolean resolved = false;
 
     /**
