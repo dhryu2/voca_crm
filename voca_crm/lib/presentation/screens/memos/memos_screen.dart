@@ -1,7 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:voca_crm/core/notification/business_place_change_notifier.dart';
+import 'package:voca_crm/core/notification/member_change_notifier.dart';
+import 'package:voca_crm/presentation/viewmodels/user_view_model.dart';
 import 'package:voca_crm/core/theme/theme_color.dart';
 import 'package:voca_crm/core/utils/message_handler.dart';
 import 'package:voca_crm/data/datasource/business_place_service.dart';
@@ -61,15 +64,21 @@ class _MemosScreenState extends State<MemosScreen>
   // Business place change listener
   StreamSubscription<BusinessPlaceChangeEvent>?
   _businessPlaceChangeSubscription;
+  StreamSubscription<MemberChangeEvent>? _memberChangeSubscription;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    // Set default business place filter to user's default
-    _selectedBusinessPlaceFilter = widget.user.defaultBusinessPlaceId;
-    _loadMembersWithMemos();
-    _loadBusinessPlaces();
+
+    // UserViewModel에서 최신 defaultBusinessPlaceId 가져오기
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final userViewModel = Provider.of<UserViewModel>(context, listen: false);
+      final currentUser = userViewModel.user;
+      _selectedBusinessPlaceFilter = currentUser?.defaultBusinessPlaceId ?? widget.user.defaultBusinessPlaceId;
+      _loadMembersWithMemos();
+      _loadBusinessPlaces();
+    });
 
     // Listen to business place changes
     _businessPlaceChangeSubscription = BusinessPlaceChangeNotifier().stream
@@ -77,6 +86,34 @@ class _MemosScreenState extends State<MemosScreen>
           // Reload business places when any change occurs
           _loadBusinessPlaces();
         });
+
+    // 회원 변경 이벤트 구독
+    _memberChangeSubscription = MemberChangeNotifier().stream
+        .listen((event) {
+          // 현재 선택된 사업장과 관련된 변경이면 회원 목록 새로고침
+          if (event.businessPlaceId == null ||
+              event.businessPlaceId == _selectedBusinessPlaceFilter) {
+            _loadMembersWithMemos();
+          }
+        });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // UserViewModel의 defaultBusinessPlaceId 변경 감지
+    final userViewModel = Provider.of<UserViewModel>(context);
+    final newDefaultBusinessPlaceId = userViewModel.user?.defaultBusinessPlaceId;
+
+    // 기본 사업장이 변경되었고, 현재 선택된 사업장이 없으면 새 기본값 사용
+    if (newDefaultBusinessPlaceId != null &&
+        newDefaultBusinessPlaceId.isNotEmpty &&
+        (_selectedBusinessPlaceFilter == null || _selectedBusinessPlaceFilter!.isEmpty)) {
+      setState(() {
+        _selectedBusinessPlaceFilter = newDefaultBusinessPlaceId;
+      });
+      _loadMembersWithMemos();
+    }
   }
 
   Future<void> _loadBusinessPlaces() async {
@@ -99,6 +136,7 @@ class _MemosScreenState extends State<MemosScreen>
     _searchController.dispose();
     _memberIdFilterController.dispose();
     _businessPlaceChangeSubscription?.cancel();
+    _memberChangeSubscription?.cancel();
     super.dispose();
   }
 

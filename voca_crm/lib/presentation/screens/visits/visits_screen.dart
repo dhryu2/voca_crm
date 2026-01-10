@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:voca_crm/core/notification/business_place_change_notifier.dart';
+import 'package:voca_crm/core/notification/member_change_notifier.dart';
 import 'package:voca_crm/core/theme/theme_color.dart';
 import 'package:voca_crm/core/utils/message_handler.dart';
 import 'package:voca_crm/core/utils/haptic_helper.dart';
@@ -46,6 +47,7 @@ class _VisitsScreenState extends State<VisitsScreen>
   List<BusinessPlaceWithRole> _businessPlaces = [];
   String? _selectedBusinessPlaceId;
   StreamSubscription<BusinessPlaceChangeEvent>? _businessPlaceChangeSubscription;
+  StreamSubscription<MemberChangeEvent>? _memberChangeSubscription;
 
   // 오늘 체크인 기록 (서버에서 로드)
   List<_RecentCheckIn> _recentCheckIns = [];
@@ -58,14 +60,49 @@ class _VisitsScreenState extends State<VisitsScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _selectedBusinessPlaceId = widget.user.defaultBusinessPlaceId;
-    _initializeData();
+
+    // UserViewModel에서 최신 defaultBusinessPlaceId 가져오기
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final userViewModel = Provider.of<UserViewModel>(context, listen: false);
+      final currentUser = userViewModel.user;
+      _selectedBusinessPlaceId = currentUser?.defaultBusinessPlaceId ?? widget.user.defaultBusinessPlaceId;
+      _initializeData();
+    });
 
     // 사업장 변경 이벤트 구독
     _businessPlaceChangeSubscription = BusinessPlaceChangeNotifier().stream
         .listen((event) {
       _loadBusinessPlaces();
     });
+
+    // 회원 변경 이벤트 구독
+    _memberChangeSubscription = MemberChangeNotifier().stream
+        .listen((event) {
+      // 현재 선택된 사업장과 관련된 변경이면 회원 목록 새로고침
+      if (event.businessPlaceId == null ||
+          event.businessPlaceId == _selectedBusinessPlaceId) {
+        _loadMembers();
+      }
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // UserViewModel의 defaultBusinessPlaceId 변경 감지
+    final userViewModel = Provider.of<UserViewModel>(context);
+    final newDefaultBusinessPlaceId = userViewModel.user?.defaultBusinessPlaceId;
+
+    // 기본 사업장이 변경되었고, 현재 선택된 사업장이 없으면 새 기본값 사용
+    if (newDefaultBusinessPlaceId != null &&
+        newDefaultBusinessPlaceId.isNotEmpty &&
+        (_selectedBusinessPlaceId == null || _selectedBusinessPlaceId!.isEmpty)) {
+      setState(() {
+        _selectedBusinessPlaceId = newDefaultBusinessPlaceId;
+      });
+      _loadMembers();
+      _loadTodayVisits();
+    }
   }
 
   Future<void> _initializeData() async {
@@ -288,6 +325,7 @@ class _VisitsScreenState extends State<VisitsScreen>
     _searchController.dispose();
     _searchFocusNode.dispose();
     _businessPlaceChangeSubscription?.cancel();
+    _memberChangeSubscription?.cancel();
     super.dispose();
   }
 

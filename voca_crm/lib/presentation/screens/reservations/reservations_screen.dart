@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:table_calendar/table_calendar.dart';
 import 'package:voca_crm/core/notification/business_place_change_notifier.dart';
+import 'package:voca_crm/presentation/viewmodels/user_view_model.dart';
 import 'package:voca_crm/core/theme/theme_color.dart';
-import 'package:voca_crm/core/utils/message_handler.dart';
 import 'package:voca_crm/core/utils/haptic_helper.dart';
+import 'package:voca_crm/core/utils/message_handler.dart';
 import 'package:voca_crm/data/datasource/business_place_service.dart';
 import 'package:voca_crm/data/datasource/member_service.dart';
 import 'package:voca_crm/data/datasource/reservation_service.dart';
@@ -16,22 +18,22 @@ import 'package:voca_crm/domain/entity/business_place_with_role.dart';
 import 'package:voca_crm/domain/entity/member.dart';
 import 'package:voca_crm/domain/entity/reservation.dart';
 import 'package:voca_crm/domain/entity/user.dart';
-import 'package:voca_crm/presentation/viewmodels/user_view_model.dart';
 import 'package:voca_crm/presentation/widgets/character_count_text_field.dart';
 import 'package:voca_crm/presentation/widgets/member_search_dialog.dart';
-import 'package:table_calendar/table_calendar.dart';
 
 class ReservationsScreen extends StatefulWidget {
   final User user;
 
-  const ReservationsScreen({Key? key, required this.user}) : super(key: key);
+  const ReservationsScreen({super.key, required this.user});
 
   @override
   State<ReservationsScreen> createState() => _ReservationsScreenState();
 }
 
 class _ReservationsScreenState extends State<ReservationsScreen> {
-  final _reservationRepository = ReservationRepositoryImpl(ReservationService());
+  final _reservationRepository = ReservationRepositoryImpl(
+    ReservationService(),
+  );
   final _memberRepository = MemberRepositoryImpl(MemberService());
   final _businessPlaceService = BusinessPlaceService();
   final _userService = UserService();
@@ -46,20 +48,45 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   // 사업장 상태
   List<BusinessPlaceWithRole> _businessPlaces = [];
   String? _selectedBusinessPlaceId;
-  StreamSubscription<BusinessPlaceChangeEvent>? _businessPlaceChangeSubscription;
+  StreamSubscription<BusinessPlaceChangeEvent>?
+  _businessPlaceChangeSubscription;
 
   @override
   void initState() {
     super.initState();
     _selectedDay = _focusedDay;
-    _selectedBusinessPlaceId = widget.user.defaultBusinessPlaceId;
-    _initializeData();
+
+    // UserViewModel에서 최신 defaultBusinessPlaceId 가져오기
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final userViewModel = Provider.of<UserViewModel>(context, listen: false);
+      final currentUser = userViewModel.user;
+      _selectedBusinessPlaceId = currentUser?.defaultBusinessPlaceId ?? widget.user.defaultBusinessPlaceId;
+      _initializeData();
+    });
 
     // 사업장 변경 이벤트 구독
     _businessPlaceChangeSubscription = BusinessPlaceChangeNotifier().stream
         .listen((event) {
-      _loadBusinessPlaces();
-    });
+          _loadBusinessPlaces();
+        });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // UserViewModel의 defaultBusinessPlaceId 변경 감지
+    final userViewModel = Provider.of<UserViewModel>(context);
+    final newDefaultBusinessPlaceId = userViewModel.user?.defaultBusinessPlaceId;
+
+    // 기본 사업장이 변경되었고, 현재 선택된 사업장이 없으면 새 기본값 사용
+    if (newDefaultBusinessPlaceId != null &&
+        newDefaultBusinessPlaceId.isNotEmpty &&
+        (_selectedBusinessPlaceId == null || _selectedBusinessPlaceId!.isEmpty)) {
+      setState(() {
+        _selectedBusinessPlaceId = newDefaultBusinessPlaceId;
+      });
+      _loadReservations();
+    }
   }
 
   Future<void> _initializeData() async {
@@ -111,11 +138,12 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       final startDate = DateTime(_focusedDay.year, _focusedDay.month, 1);
       final endDate = DateTime(_focusedDay.year, _focusedDay.month + 1, 0);
 
-      final reservations = await _reservationRepository.getReservationsByDateRange(
-        _selectedBusinessPlaceId!,
-        startDate,
-        endDate,
-      );
+      final reservations = await _reservationRepository
+          .getReservationsByDateRange(
+            _selectedBusinessPlaceId!,
+            startDate,
+            endDate,
+          );
 
       if (!mounted) return;
       setState(() {
@@ -171,9 +199,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     HapticHelper.medium();
 
     if (_selectedBusinessPlaceId == null || _selectedBusinessPlaceId!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('사업장을 선택해주세요')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('사업장을 선택해주세요')));
       return;
     }
 
@@ -216,7 +244,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
               ),
               elevation: 0,
               backgroundColor: Colors.white,
-              insetPadding: EdgeInsets.symmetric(horizontal: screenWidth * 0.05),
+              insetPadding: EdgeInsets.symmetric(
+                horizontal: screenWidth * 0.05,
+              ),
               child: Container(
                 constraints: BoxConstraints(
                   maxWidth: screenWidth * 0.9,
@@ -230,7 +260,10 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                       alignment: Alignment.centerRight,
                       child: IconButton(
                         onPressed: () => Navigator.pop(context),
-                        icon: Icon(Icons.close, color: ThemeColor.textSecondary),
+                        icon: Icon(
+                          Icons.close,
+                          color: ThemeColor.textSecondary,
+                        ),
                         padding: EdgeInsets.all(screenWidth * 0.04),
                       ),
                     ),
@@ -290,7 +323,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                         : ThemeColor.border,
                                     width: selectedMember != null ? 2 : 1,
                                   ),
-                                  borderRadius: BorderRadius.circular(screenWidth * 0.03),
+                                  borderRadius: BorderRadius.circular(
+                                    screenWidth * 0.03,
+                                  ),
                                 ),
                                 child: Row(
                                   children: [
@@ -299,13 +334,18 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                         width: screenWidth * 0.08,
                                         height: screenWidth * 0.08,
                                         decoration: BoxDecoration(
-                                          color: ThemeColor.primary.withValues(alpha: 0.1),
-                                          borderRadius: BorderRadius.circular(screenWidth * 0.02),
+                                          color: ThemeColor.primary.withValues(
+                                            alpha: 0.1,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            screenWidth * 0.02,
+                                          ),
                                         ),
                                         child: Center(
                                           child: Text(
                                             selectedMember!.name.isNotEmpty
-                                                ? selectedMember!.name.substring(0, 1)
+                                                ? selectedMember!.name
+                                                      .substring(0, 1)
                                                 : '?',
                                             style: TextStyle(
                                               fontSize: screenWidth * 0.035,
@@ -318,7 +358,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                       SizedBox(width: screenWidth * 0.03),
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Text(
                                               selectedMember!.name,
@@ -370,7 +411,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                               children: [
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       _buildFieldLabel('예약 날짜', screenWidth),
                                       SizedBox(height: screenHeight * 0.01),
@@ -380,7 +422,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                             context: context,
                                             initialDate: selectedDate,
                                             firstDate: DateTime.now(),
-                                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                                            lastDate: DateTime.now().add(
+                                              const Duration(days: 365),
+                                            ),
                                           );
                                           if (date != null) {
                                             setDialogState(() {
@@ -394,16 +438,28 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                             vertical: screenHeight * 0.015,
                                           ),
                                           decoration: BoxDecoration(
-                                            border: Border.all(color: ThemeColor.border),
-                                            borderRadius: BorderRadius.circular(screenWidth * 0.03),
+                                            border: Border.all(
+                                              color: ThemeColor.border,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              screenWidth * 0.03,
+                                            ),
                                           ),
                                           child: Row(
                                             children: [
-                                              Icon(Icons.calendar_today, size: screenWidth * 0.045, color: ThemeColor.primary),
-                                              SizedBox(width: screenWidth * 0.02),
+                                              Icon(
+                                                Icons.calendar_today,
+                                                size: screenWidth * 0.045,
+                                                color: ThemeColor.primary,
+                                              ),
+                                              SizedBox(
+                                                width: screenWidth * 0.02,
+                                              ),
                                               Text(
                                                 '${selectedDate.month}/${selectedDate.day}',
-                                                style: TextStyle(fontSize: screenWidth * 0.038),
+                                                style: TextStyle(
+                                                  fontSize: screenWidth * 0.038,
+                                                ),
                                               ),
                                             ],
                                           ),
@@ -415,7 +471,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                 SizedBox(width: screenWidth * 0.03),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       _buildFieldLabel('예약 시간', screenWidth),
                                       SizedBox(height: screenHeight * 0.01),
@@ -437,16 +494,28 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                             vertical: screenHeight * 0.015,
                                           ),
                                           decoration: BoxDecoration(
-                                            border: Border.all(color: ThemeColor.border),
-                                            borderRadius: BorderRadius.circular(screenWidth * 0.03),
+                                            border: Border.all(
+                                              color: ThemeColor.border,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              screenWidth * 0.03,
+                                            ),
                                           ),
                                           child: Row(
                                             children: [
-                                              Icon(Icons.access_time, size: screenWidth * 0.045, color: ThemeColor.primary),
-                                              SizedBox(width: screenWidth * 0.02),
+                                              Icon(
+                                                Icons.access_time,
+                                                size: screenWidth * 0.045,
+                                                color: ThemeColor.primary,
+                                              ),
+                                              SizedBox(
+                                                width: screenWidth * 0.02,
+                                              ),
                                               Text(
                                                 '${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}',
-                                                style: TextStyle(fontSize: screenWidth * 0.038),
+                                                style: TextStyle(
+                                                  fontSize: screenWidth * 0.038,
+                                                ),
                                               ),
                                             ],
                                           ),
@@ -478,16 +547,29 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                 hintText: '예: 10, 30, 60, 90',
                                 suffixText: '분',
                                 border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(screenWidth * 0.03),
-                                  borderSide: BorderSide(color: ThemeColor.border),
+                                  borderRadius: BorderRadius.circular(
+                                    screenWidth * 0.03,
+                                  ),
+                                  borderSide: BorderSide(
+                                    color: ThemeColor.border,
+                                  ),
                                 ),
                                 enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(screenWidth * 0.03),
-                                  borderSide: BorderSide(color: ThemeColor.border),
+                                  borderRadius: BorderRadius.circular(
+                                    screenWidth * 0.03,
+                                  ),
+                                  borderSide: BorderSide(
+                                    color: ThemeColor.border,
+                                  ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(screenWidth * 0.03),
-                                  borderSide: BorderSide(color: ThemeColor.primary, width: 2),
+                                  borderRadius: BorderRadius.circular(
+                                    screenWidth * 0.03,
+                                  ),
+                                  borderSide: BorderSide(
+                                    color: ThemeColor.primary,
+                                    width: 2,
+                                  ),
                                 ),
                                 contentPadding: EdgeInsets.symmetric(
                                   horizontal: screenWidth * 0.04,
@@ -496,7 +578,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                               ),
                               onChanged: (value) {
                                 final parsed = int.tryParse(value);
-                                if (parsed != null && parsed > 0 && parsed <= 480) {
+                                if (parsed != null &&
+                                    parsed > 0 &&
+                                    parsed <= 480) {
                                   setDialogState(() {
                                     durationMinutes = parsed;
                                   });
@@ -534,9 +618,13 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                     child: OutlinedButton(
                                       onPressed: () => Navigator.pop(context),
                                       style: OutlinedButton.styleFrom(
-                                        side: BorderSide(color: ThemeColor.border),
+                                        side: BorderSide(
+                                          color: ThemeColor.border,
+                                        ),
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(screenWidth * 0.03),
+                                          borderRadius: BorderRadius.circular(
+                                            screenWidth * 0.03,
+                                          ),
                                         ),
                                       ),
                                       child: Text(
@@ -558,13 +646,19 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                       onPressed: selectedMember == null
                                           ? null
                                           : () async {
-                                              final serviceType = serviceTypeController.text.trim();
-                                              final notes = notesController.text.trim();
-                                              final remark = remarkController.text.trim();
+                                              final serviceType =
+                                                  serviceTypeController.text
+                                                      .trim();
+                                              final notes = notesController.text
+                                                  .trim();
+                                              final remark = remarkController
+                                                  .text
+                                                  .trim();
                                               final reservation = Reservation(
                                                 id: '',
                                                 memberId: selectedMember!.id,
-                                                businessPlaceId: _selectedBusinessPlaceId!,
+                                                businessPlaceId:
+                                                    _selectedBusinessPlaceId!,
                                                 reservationDate: selectedDate,
                                                 reservationTime: DateTime(
                                                   1970,
@@ -573,32 +667,49 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                                   selectedTime.hour,
                                                   selectedTime.minute,
                                                 ),
-                                                status: ReservationStatus.PENDING,
-                                                serviceType: serviceType.isEmpty ? null : serviceType,
-                                                durationMinutes: durationMinutes,
-                                                notes: notes.isEmpty ? null : notes,
-                                                remark: remark.isEmpty ? null : remark,
-                                                createdBy: widget.user.providerId,
+                                                status:
+                                                    ReservationStatus.PENDING,
+                                                serviceType: serviceType.isEmpty
+                                                    ? null
+                                                    : serviceType,
+                                                durationMinutes:
+                                                    durationMinutes,
+                                                notes: notes.isEmpty
+                                                    ? null
+                                                    : notes,
+                                                remark: remark.isEmpty
+                                                    ? null
+                                                    : remark,
+                                                createdBy:
+                                                    widget.user.providerId,
                                                 createdAt: DateTime.now(),
                                                 updatedAt: DateTime.now(),
                                               );
 
                                               try {
-                                                await _reservationRepository.createReservation(reservation);
+                                                await _reservationRepository
+                                                    .createReservation(
+                                                      reservation,
+                                                    );
                                                 if (!mounted) return;
                                                 Navigator.pop(context);
                                                 await _loadReservations();
-                                                AppMessageHandler.showSuccessSnackBar(context, '예약이 생성되었습니다');
+                                                AppMessageHandler.showSuccessSnackBar(
+                                                  context,
+                                                  '예약이 생성되었습니다',
+                                                );
                                               } catch (e, stackTrace) {
                                                 if (!mounted) return;
                                                 await AppMessageHandler.handleErrorWithLogging(
                                                   context,
                                                   e,
                                                   stackTrace,
-                                                  screenName: 'ReservationsScreen',
+                                                  screenName:
+                                                      'ReservationsScreen',
                                                   action: '예약 추가',
                                                   userId: widget.user.id,
-                                                  businessPlaceId: _selectedBusinessPlaceId,
+                                                  businessPlaceId:
+                                                      _selectedBusinessPlaceId,
                                                 );
                                               }
                                             },
@@ -607,7 +718,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                         foregroundColor: Colors.white,
                                         elevation: 0,
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(screenWidth * 0.03),
+                                          borderRadius: BorderRadius.circular(
+                                            screenWidth * 0.03,
+                                          ),
                                         ),
                                       ),
                                       child: Text(
@@ -655,126 +768,135 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? _buildErrorView()
-              : Column(
-                  children: [
-                    // Business Place Selector
-                    _buildBusinessPlaceSelector(screenWidth, MediaQuery.of(context).size.height),
-
-                    // Data Retention Notice
-                    _buildRetentionNotice(screenWidth),
-
-                    // Calendar
-                    Container(
-                      color: Colors.white,
-                      child: TableCalendar(
-                        firstDay: DateTime.utc(2020, 1, 1),
-                        lastDay: DateTime.utc(2030, 12, 31),
-                        focusedDay: _focusedDay,
-                        selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-                        onDaySelected: _onDaySelected,
-                        onPageChanged: (focusedDay) {
-                          _focusedDay = focusedDay;
-                          _loadReservations();
-                        },
-                        calendarStyle: CalendarStyle(
-                          todayDecoration: BoxDecoration(
-                            color: ThemeColor.primary.withValues(alpha: 0.3),
-                            shape: BoxShape.circle,
-                          ),
-                          selectedDecoration: BoxDecoration(
-                            color: ThemeColor.primary,
-                            shape: BoxShape.circle,
-                          ),
-                          markerDecoration: BoxDecoration(
-                            color: ThemeColor.primary.withValues(alpha: 0.7),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        eventLoader: _getReservationsForDay,
-                        headerStyle: const HeaderStyle(
-                          formatButtonVisible: false,
-                          titleCentered: true,
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: screenWidth * 0.04),
-
-                    // Selected day reservations
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.05),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            _selectedDay == null
-                                ? '예약 목록'
-                                : '${_selectedDay!.month}월 ${_selectedDay!.day}일 예약',
-                            style: TextStyle(
-                              fontSize: screenWidth * 0.045,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            '${_selectedDayReservations.length}건',
-                            style: TextStyle(
-                              fontSize: screenWidth * 0.04,
-                              color: ThemeColor.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    SizedBox(height: screenWidth * 0.03),
-
-                    // Reservations list with Pull-to-Refresh
-                    Expanded(
-                      child: RefreshIndicator(
-                        onRefresh: _loadReservations,
-                        color: ThemeColor.primary,
-                        child: _selectedDayReservations.isEmpty
-                            ? ListView(
-                                physics: const AlwaysScrollableScrollPhysics(),
-                                children: [
-                                  SizedBox(height: MediaQuery.of(context).size.height * 0.08),
-                                  Center(
-                                    child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.event_busy,
-                                          size: screenWidth * 0.16,
-                                          color: ThemeColor.textTertiary,
-                                        ),
-                                        SizedBox(height: screenWidth * 0.04),
-                                        Text(
-                                          '예약이 없습니다',
-                                          style: TextStyle(
-                                            fontSize: screenWidth * 0.04,
-                                            color: ThemeColor.textSecondary,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              )
-                            : ListView.separated(
-                                physics: const AlwaysScrollableScrollPhysics(),
-                                padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.05),
-                                itemCount: _selectedDayReservations.length,
-                                separatorBuilder: (context, index) =>
-                                    SizedBox(height: screenWidth * 0.02),
-                                itemBuilder: (context, index) {
-                                  final reservation = _selectedDayReservations[index];
-                                  return _buildReservationCard(reservation);
-                                },
-                              ),
-                      ),
-                    ),
-                  ],
+          ? _buildErrorView()
+          : Column(
+              children: [
+                // Business Place Selector
+                _buildBusinessPlaceSelector(
+                  screenWidth,
+                  MediaQuery.of(context).size.height,
                 ),
+
+                // Data Retention Notice
+                _buildRetentionNotice(screenWidth),
+
+                // Calendar
+                Container(
+                  color: Colors.white,
+                  child: TableCalendar(
+                    firstDay: DateTime.utc(2020, 1, 1),
+                    lastDay: DateTime.utc(2030, 12, 31),
+                    focusedDay: _focusedDay,
+                    selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+                    onDaySelected: _onDaySelected,
+                    onPageChanged: (focusedDay) {
+                      _focusedDay = focusedDay;
+                      _loadReservations();
+                    },
+                    calendarStyle: CalendarStyle(
+                      todayDecoration: BoxDecoration(
+                        color: ThemeColor.primary.withValues(alpha: 0.3),
+                        shape: BoxShape.circle,
+                      ),
+                      selectedDecoration: BoxDecoration(
+                        color: ThemeColor.primary,
+                        shape: BoxShape.circle,
+                      ),
+                      markerDecoration: BoxDecoration(
+                        color: ThemeColor.primary.withValues(alpha: 0.7),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    eventLoader: _getReservationsForDay,
+                    headerStyle: const HeaderStyle(
+                      formatButtonVisible: false,
+                      titleCentered: true,
+                    ),
+                  ),
+                ),
+                SizedBox(height: screenWidth * 0.04),
+
+                // Selected day reservations
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.05),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _selectedDay == null
+                            ? '예약 목록'
+                            : '${_selectedDay!.month}월 ${_selectedDay!.day}일 예약',
+                        style: TextStyle(
+                          fontSize: screenWidth * 0.045,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        '${_selectedDayReservations.length}건',
+                        style: TextStyle(
+                          fontSize: screenWidth * 0.04,
+                          color: ThemeColor.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: screenWidth * 0.03),
+
+                // Reservations list with Pull-to-Refresh
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _loadReservations,
+                    color: ThemeColor.primary,
+                    child: _selectedDayReservations.isEmpty
+                        ? ListView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            children: [
+                              SizedBox(
+                                height:
+                                    MediaQuery.of(context).size.height * 0.08,
+                              ),
+                              Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.event_busy,
+                                      size: screenWidth * 0.16,
+                                      color: ThemeColor.textTertiary,
+                                    ),
+                                    SizedBox(height: screenWidth * 0.04),
+                                    Text(
+                                      '예약이 없습니다',
+                                      style: TextStyle(
+                                        fontSize: screenWidth * 0.04,
+                                        color: ThemeColor.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          )
+                        : ListView.separated(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: screenWidth * 0.05,
+                            ),
+                            itemCount: _selectedDayReservations.length,
+                            separatorBuilder: (context, index) =>
+                                SizedBox(height: screenWidth * 0.02),
+                            itemBuilder: (context, index) {
+                              final reservation =
+                                  _selectedDayReservations[index];
+                              return _buildReservationCard(reservation);
+                            },
+                          ),
+                  ),
+                ),
+              ],
+            ),
       floatingActionButton: FloatingActionButton(
         heroTag: 'reservations_fab',
         onPressed: _showAddReservationDialog,
@@ -871,7 +993,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
               width: screenWidth * 0.12,
               height: screenWidth * 0.12,
               decoration: BoxDecoration(
-                color: _getStatusColor(reservation.status).withValues(alpha: 0.2),
+                color: _getStatusColor(
+                  reservation.status,
+                ).withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(screenWidth * 0.02),
               ),
               child: Center(
@@ -895,13 +1019,20 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                 SizedBox(height: screenHeight * 0.005),
                 Row(
                   children: [
-                    Icon(Icons.access_time, size: screenWidth * 0.035, color: ThemeColor.textSecondary),
+                    Icon(
+                      Icons.access_time,
+                      size: screenWidth * 0.035,
+                      color: ThemeColor.textSecondary,
+                    ),
                     SizedBox(width: screenWidth * 0.01),
                     Text(
                       '${reservation.reservationTime.hour.toString().padLeft(2, '0')}:'
                       '${reservation.reservationTime.minute.toString().padLeft(2, '0')} '
                       '(${reservation.durationMinutes}분)',
-                      style: TextStyle(fontSize: screenWidth * 0.03, color: ThemeColor.textSecondary),
+                      style: TextStyle(
+                        fontSize: screenWidth * 0.03,
+                        color: ThemeColor.textSecondary,
+                      ),
                     ),
                   ],
                 ),
@@ -909,7 +1040,10 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                   SizedBox(height: screenHeight * 0.003),
                   Text(
                     reservation.serviceType!,
-                    style: TextStyle(fontSize: screenWidth * 0.03, color: ThemeColor.textSecondary),
+                    style: TextStyle(
+                      fontSize: screenWidth * 0.03,
+                      color: ThemeColor.textSecondary,
+                    ),
                   ),
                 ],
               ],
@@ -926,7 +1060,10 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.03, vertical: screenHeight * 0.008),
+      padding: EdgeInsets.symmetric(
+        horizontal: screenWidth * 0.03,
+        vertical: screenHeight * 0.008,
+      ),
       decoration: BoxDecoration(
         color: _getStatusColor(status).withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(screenWidth * 0.03),
@@ -1031,7 +1168,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                         width: screenWidth * 0.16,
                         height: screenWidth * 0.16,
                         decoration: BoxDecoration(
-                          color: _getStatusColor(reservation.status).withValues(alpha: 0.15),
+                          color: _getStatusColor(
+                            reservation.status,
+                          ).withValues(alpha: 0.15),
                           shape: BoxShape.circle,
                         ),
                         child: Center(
@@ -1066,16 +1205,25 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                         padding: EdgeInsets.all(screenWidth * 0.04),
                         decoration: BoxDecoration(
                           color: ThemeColor.neutral50,
-                          borderRadius: BorderRadius.circular(screenWidth * 0.03),
+                          borderRadius: BorderRadius.circular(
+                            screenWidth * 0.03,
+                          ),
                           border: Border.all(color: ThemeColor.border),
                         ),
                         child: Column(
                           children: [
-                            _buildDetailRow('날짜',
-                                '${reservation.reservationDate.year}-${reservation.reservationDate.month.toString().padLeft(2, '0')}-${reservation.reservationDate.day.toString().padLeft(2, '0')}'),
-                            _buildDetailRow('시간',
-                                '${reservation.reservationTime.hour.toString().padLeft(2, '0')}:${reservation.reservationTime.minute.toString().padLeft(2, '0')}'),
-                            _buildDetailRow('소요 시간', '${reservation.durationMinutes}분'),
+                            _buildDetailRow(
+                              '날짜',
+                              '${reservation.reservationDate.year}-${reservation.reservationDate.month.toString().padLeft(2, '0')}-${reservation.reservationDate.day.toString().padLeft(2, '0')}',
+                            ),
+                            _buildDetailRow(
+                              '시간',
+                              '${reservation.reservationTime.hour.toString().padLeft(2, '0')}:${reservation.reservationTime.minute.toString().padLeft(2, '0')}',
+                            ),
+                            _buildDetailRow(
+                              '소요 시간',
+                              '${reservation.durationMinutes}분',
+                            ),
                             if (reservation.serviceType != null)
                               _buildDetailRow('서비스', reservation.serviceType!),
                             if (reservation.notes != null)
@@ -1115,7 +1263,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                             foregroundColor: ThemeColor.primary,
                             side: BorderSide(color: ThemeColor.primary),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(screenWidth * 0.03),
+                              borderRadius: BorderRadius.circular(
+                                screenWidth * 0.03,
+                              ),
                             ),
                           ),
                         ),
@@ -1134,7 +1284,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                   style: OutlinedButton.styleFrom(
                                     side: BorderSide(color: ThemeColor.border),
                                     shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(screenWidth * 0.03),
+                                      borderRadius: BorderRadius.circular(
+                                        screenWidth * 0.03,
+                                      ),
                                     ),
                                   ),
                                   child: Text(
@@ -1155,15 +1307,19 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                 child: ElevatedButton(
                                   onPressed: () async {
                                     try {
-                                      await _reservationRepository.updateReservationStatus(
-                                        reservation.id,
-                                        ReservationStatus.CONFIRMED,
-                                        updatedBy: widget.user.providerId,
-                                      );
+                                      await _reservationRepository
+                                          .updateReservationStatus(
+                                            reservation.id,
+                                            ReservationStatus.CONFIRMED,
+                                            updatedBy: widget.user.providerId,
+                                          );
                                       if (!mounted) return;
                                       Navigator.pop(context);
                                       await _loadReservations();
-                                      AppMessageHandler.showSuccessSnackBar(context, '예약이 확정되었습니다');
+                                      AppMessageHandler.showSuccessSnackBar(
+                                        context,
+                                        '예약이 확정되었습니다',
+                                      );
                                     } catch (e, stackTrace) {
                                       if (!mounted) return;
                                       await AppMessageHandler.handleErrorWithLogging(
@@ -1173,7 +1329,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                         screenName: 'ReservationsScreen',
                                         action: '예약 상태 변경',
                                         userId: widget.user.id,
-                                        businessPlaceId: _selectedBusinessPlaceId,
+                                        businessPlaceId:
+                                            _selectedBusinessPlaceId,
                                       );
                                     }
                                   },
@@ -1182,7 +1339,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                     foregroundColor: Colors.white,
                                     elevation: 0,
                                     shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(screenWidth * 0.03),
+                                      borderRadius: BorderRadius.circular(
+                                        screenWidth * 0.03,
+                                      ),
                                     ),
                                   ),
                                   child: Text(
@@ -1206,7 +1365,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                             style: OutlinedButton.styleFrom(
                               side: BorderSide(color: ThemeColor.border),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(screenWidth * 0.03),
+                                borderRadius: BorderRadius.circular(
+                                  screenWidth * 0.03,
+                                ),
                               ),
                             ),
                             child: Text(
@@ -1243,10 +1404,16 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       minute: reservation.reservationTime.minute,
     );
     ReservationStatus selectedStatus = reservation.status;
-    final serviceTypeController = TextEditingController(text: reservation.serviceType ?? '');
+    final serviceTypeController = TextEditingController(
+      text: reservation.serviceType ?? '',
+    );
     int durationMinutes = reservation.durationMinutes;
-    final notesController = TextEditingController(text: reservation.notes ?? '');
-    final remarkController = TextEditingController(text: reservation.remark ?? '');
+    final notesController = TextEditingController(
+      text: reservation.notes ?? '',
+    );
+    final remarkController = TextEditingController(
+      text: reservation.remark ?? '',
+    );
 
     showDialog(
       context: context,
@@ -1260,7 +1427,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
               ),
               elevation: 0,
               backgroundColor: Colors.white,
-              insetPadding: EdgeInsets.symmetric(horizontal: screenWidth * 0.05),
+              insetPadding: EdgeInsets.symmetric(
+                horizontal: screenWidth * 0.05,
+              ),
               child: Container(
                 constraints: BoxConstraints(
                   maxWidth: screenWidth * 0.9,
@@ -1274,7 +1443,10 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                       alignment: Alignment.centerRight,
                       child: IconButton(
                         onPressed: () => Navigator.pop(context),
-                        icon: Icon(Icons.close, color: ThemeColor.textSecondary),
+                        icon: Icon(
+                          Icons.close,
+                          color: ThemeColor.textSecondary,
+                        ),
                         padding: EdgeInsets.all(screenWidth * 0.04),
                       ),
                     ),
@@ -1323,16 +1495,29 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                               value: selectedStatus,
                               decoration: InputDecoration(
                                 border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(screenWidth * 0.03),
-                                  borderSide: BorderSide(color: ThemeColor.border),
+                                  borderRadius: BorderRadius.circular(
+                                    screenWidth * 0.03,
+                                  ),
+                                  borderSide: BorderSide(
+                                    color: ThemeColor.border,
+                                  ),
                                 ),
                                 enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(screenWidth * 0.03),
-                                  borderSide: BorderSide(color: ThemeColor.border),
+                                  borderRadius: BorderRadius.circular(
+                                    screenWidth * 0.03,
+                                  ),
+                                  borderSide: BorderSide(
+                                    color: ThemeColor.border,
+                                  ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(screenWidth * 0.03),
-                                  borderSide: BorderSide(color: ThemeColor.primary, width: 2),
+                                  borderRadius: BorderRadius.circular(
+                                    screenWidth * 0.03,
+                                  ),
+                                  borderSide: BorderSide(
+                                    color: ThemeColor.primary,
+                                    width: 2,
+                                  ),
                                 ),
                                 contentPadding: EdgeInsets.symmetric(
                                   horizontal: screenWidth * 0.04,
@@ -1373,7 +1558,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                               children: [
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       _buildFieldLabel('예약 날짜', screenWidth),
                                       SizedBox(height: screenHeight * 0.01),
@@ -1383,7 +1569,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                             context: context,
                                             initialDate: selectedDate,
                                             firstDate: DateTime(2020),
-                                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                                            lastDate: DateTime.now().add(
+                                              const Duration(days: 365),
+                                            ),
                                           );
                                           if (date != null) {
                                             setDialogState(() {
@@ -1397,16 +1585,28 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                             vertical: screenHeight * 0.015,
                                           ),
                                           decoration: BoxDecoration(
-                                            border: Border.all(color: ThemeColor.border),
-                                            borderRadius: BorderRadius.circular(screenWidth * 0.03),
+                                            border: Border.all(
+                                              color: ThemeColor.border,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              screenWidth * 0.03,
+                                            ),
                                           ),
                                           child: Row(
                                             children: [
-                                              Icon(Icons.calendar_today, size: screenWidth * 0.045, color: ThemeColor.primary),
-                                              SizedBox(width: screenWidth * 0.02),
+                                              Icon(
+                                                Icons.calendar_today,
+                                                size: screenWidth * 0.045,
+                                                color: ThemeColor.primary,
+                                              ),
+                                              SizedBox(
+                                                width: screenWidth * 0.02,
+                                              ),
                                               Text(
                                                 '${selectedDate.month}/${selectedDate.day}',
-                                                style: TextStyle(fontSize: screenWidth * 0.038),
+                                                style: TextStyle(
+                                                  fontSize: screenWidth * 0.038,
+                                                ),
                                               ),
                                             ],
                                           ),
@@ -1418,7 +1618,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                 SizedBox(width: screenWidth * 0.03),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       _buildFieldLabel('예약 시간', screenWidth),
                                       SizedBox(height: screenHeight * 0.01),
@@ -1440,16 +1641,28 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                             vertical: screenHeight * 0.015,
                                           ),
                                           decoration: BoxDecoration(
-                                            border: Border.all(color: ThemeColor.border),
-                                            borderRadius: BorderRadius.circular(screenWidth * 0.03),
+                                            border: Border.all(
+                                              color: ThemeColor.border,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              screenWidth * 0.03,
+                                            ),
                                           ),
                                           child: Row(
                                             children: [
-                                              Icon(Icons.access_time, size: screenWidth * 0.045, color: ThemeColor.primary),
-                                              SizedBox(width: screenWidth * 0.02),
+                                              Icon(
+                                                Icons.access_time,
+                                                size: screenWidth * 0.045,
+                                                color: ThemeColor.primary,
+                                              ),
+                                              SizedBox(
+                                                width: screenWidth * 0.02,
+                                              ),
                                               Text(
                                                 '${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}',
-                                                style: TextStyle(fontSize: screenWidth * 0.038),
+                                                style: TextStyle(
+                                                  fontSize: screenWidth * 0.038,
+                                                ),
                                               ),
                                             ],
                                           ),
@@ -1481,16 +1694,29 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                 hintText: '예: 10, 30, 60, 90',
                                 suffixText: '분',
                                 border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(screenWidth * 0.03),
-                                  borderSide: BorderSide(color: ThemeColor.border),
+                                  borderRadius: BorderRadius.circular(
+                                    screenWidth * 0.03,
+                                  ),
+                                  borderSide: BorderSide(
+                                    color: ThemeColor.border,
+                                  ),
                                 ),
                                 enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(screenWidth * 0.03),
-                                  borderSide: BorderSide(color: ThemeColor.border),
+                                  borderRadius: BorderRadius.circular(
+                                    screenWidth * 0.03,
+                                  ),
+                                  borderSide: BorderSide(
+                                    color: ThemeColor.border,
+                                  ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(screenWidth * 0.03),
-                                  borderSide: BorderSide(color: ThemeColor.primary, width: 2),
+                                  borderRadius: BorderRadius.circular(
+                                    screenWidth * 0.03,
+                                  ),
+                                  borderSide: BorderSide(
+                                    color: ThemeColor.primary,
+                                    width: 2,
+                                  ),
                                 ),
                                 contentPadding: EdgeInsets.symmetric(
                                   horizontal: screenWidth * 0.04,
@@ -1499,7 +1725,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                               ),
                               onChanged: (value) {
                                 final parsed = int.tryParse(value);
-                                if (parsed != null && parsed > 0 && parsed <= 480) {
+                                if (parsed != null &&
+                                    parsed > 0 &&
+                                    parsed <= 480) {
                                   setDialogState(() {
                                     durationMinutes = parsed;
                                   });
@@ -1537,9 +1765,13 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                     child: OutlinedButton(
                                       onPressed: () => Navigator.pop(context),
                                       style: OutlinedButton.styleFrom(
-                                        side: BorderSide(color: ThemeColor.border),
+                                        side: BorderSide(
+                                          color: ThemeColor.border,
+                                        ),
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(screenWidth * 0.03),
+                                          borderRadius: BorderRadius.circular(
+                                            screenWidth * 0.03,
+                                          ),
                                         ),
                                       ),
                                       child: Text(
@@ -1559,36 +1791,50 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                     height: screenHeight * 0.06,
                                     child: ElevatedButton(
                                       onPressed: () async {
-                                        final serviceType = serviceTypeController.text.trim();
-                                        final notes = notesController.text.trim();
-                                        final remark = remarkController.text.trim();
+                                        final serviceType =
+                                            serviceTypeController.text.trim();
+                                        final notes = notesController.text
+                                            .trim();
+                                        final remark = remarkController.text
+                                            .trim();
 
-                                        final updatedReservation = reservation.copyWith(
-                                          reservationDate: selectedDate,
-                                          reservationTime: DateTime(
-                                            1970,
-                                            1,
-                                            1,
-                                            selectedTime.hour,
-                                            selectedTime.minute,
-                                          ),
-                                          status: selectedStatus,
-                                          serviceType: serviceType.isEmpty ? null : serviceType,
-                                          durationMinutes: durationMinutes,
-                                          notes: notes.isEmpty ? null : notes,
-                                          remark: remark.isEmpty ? null : remark,
-                                          updatedBy: widget.user.providerId,
-                                        );
+                                        final updatedReservation = reservation
+                                            .copyWith(
+                                              reservationDate: selectedDate,
+                                              reservationTime: DateTime(
+                                                1970,
+                                                1,
+                                                1,
+                                                selectedTime.hour,
+                                                selectedTime.minute,
+                                              ),
+                                              status: selectedStatus,
+                                              serviceType: serviceType.isEmpty
+                                                  ? null
+                                                  : serviceType,
+                                              durationMinutes: durationMinutes,
+                                              notes: notes.isEmpty
+                                                  ? null
+                                                  : notes,
+                                              remark: remark.isEmpty
+                                                  ? null
+                                                  : remark,
+                                              updatedBy: widget.user.providerId,
+                                            );
 
                                         try {
-                                          await _reservationRepository.updateReservation(
-                                            reservation.id,
-                                            updatedReservation,
-                                          );
+                                          await _reservationRepository
+                                              .updateReservation(
+                                                reservation.id,
+                                                updatedReservation,
+                                              );
                                           if (!mounted) return;
                                           Navigator.pop(context);
                                           await _loadReservations();
-                                          AppMessageHandler.showSuccessSnackBar(context, '예약이 수정되었습니다');
+                                          AppMessageHandler.showSuccessSnackBar(
+                                            context,
+                                            '예약이 수정되었습니다',
+                                          );
                                         } catch (e, stackTrace) {
                                           if (!mounted) return;
                                           await AppMessageHandler.handleErrorWithLogging(
@@ -1598,7 +1844,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                             screenName: 'ReservationsScreen',
                                             action: '예약 수정',
                                             userId: widget.user.id,
-                                            businessPlaceId: _selectedBusinessPlaceId,
+                                            businessPlaceId:
+                                                _selectedBusinessPlaceId,
                                           );
                                         }
                                       },
@@ -1607,7 +1854,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                         foregroundColor: Colors.white,
                                         elevation: 0,
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(screenWidth * 0.03),
+                                          borderRadius: BorderRadius.circular(
+                                            screenWidth * 0.03,
+                                          ),
                                         ),
                                       ),
                                       child: Text(
@@ -1701,7 +1950,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => _showBusinessPlaceSelectorDialog(screenWidth, screenHeight),
+          onTap: () =>
+              _showBusinessPlaceSelectorDialog(screenWidth, screenHeight),
           borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: EdgeInsets.symmetric(
@@ -1813,7 +2063,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                 child: ListView.separated(
                   shrinkWrap: true,
                   itemCount: _businessPlaces.length,
-                  separatorBuilder: (context, index) => const Divider(height: 1),
+                  separatorBuilder: (context, index) =>
+                      const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final bp = _businessPlaces[index];
                     final isSelected =
@@ -1843,8 +2094,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                         bp.businessPlace.name,
                         style: TextStyle(
                           fontSize: screenWidth * 0.038,
-                          fontWeight:
-                              isSelected ? FontWeight.w700 : FontWeight.w600,
+                          fontWeight: isSelected
+                              ? FontWeight.w700
+                              : FontWeight.w600,
                           color: isSelected
                               ? ThemeColor.primary
                               : ThemeColor.textPrimary,
