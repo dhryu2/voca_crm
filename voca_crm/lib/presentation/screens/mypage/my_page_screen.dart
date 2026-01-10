@@ -581,6 +581,10 @@ class _MyPageScreenState extends State<MyPageScreen> {
                                   context,
                                   '프로필이 업데이트되었습니다',
                                 );
+                                // 화면 강제 갱신
+                                if (mounted) {
+                                  setState(() {});
+                                }
                               }
                             } catch (e, stackTrace) {
                               if (context.mounted) {

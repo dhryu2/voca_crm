@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' hide ErrorSummary;
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:voca_crm/core/network/api_client.dart';
 import 'package:voca_crm/core/error/exception_parser.dart';
+import 'package:voca_crm/core/network/api_client.dart';
 import 'package:voca_crm/domain/entity/error_log.dart';
 
 /// 오류 로그 서비스
@@ -22,7 +22,7 @@ class ErrorLogService {
   static String? _cachedPlatform;
 
   ErrorLogService._({ApiClient? apiClient})
-      : _apiClient = apiClient ?? ApiClient.instance;
+    : _apiClient = apiClient ?? ApiClient.instance;
 
   /// 싱글톤 인스턴스
   static ErrorLogService get instance {
@@ -119,8 +119,8 @@ class ErrorLogService {
     final severity = httpStatusCode >= 500
         ? ErrorSeverity.critical
         : httpStatusCode >= 400
-            ? ErrorSeverity.error
-            : ErrorSeverity.warning;
+        ? ErrorSeverity.error
+        : ErrorSeverity.warning;
 
     await logError(
       userId: userId,
@@ -237,7 +237,8 @@ class ErrorLogService {
       'size': size.toString(),
     };
 
-    if (businessPlaceId != null) queryParams['businessPlaceId'] = businessPlaceId;
+    if (businessPlaceId != null)
+      queryParams['businessPlaceId'] = businessPlaceId;
     if (severity != null) queryParams['severity'] = severity.value;
     if (resolved != null) queryParams['resolved'] = resolved.toString();
 
@@ -299,7 +300,8 @@ class ErrorLogService {
   /// 미해결 오류 개수
   Future<int> getUnresolvedCount({String? businessPlaceId}) async {
     final queryParams = <String, String>{};
-    if (businessPlaceId != null) queryParams['businessPlaceId'] = businessPlaceId;
+    if (businessPlaceId != null)
+      queryParams['businessPlaceId'] = businessPlaceId;
 
     final response = await _apiClient.get(
       '/api/error-logs/unresolved-count',
@@ -334,7 +336,13 @@ class ErrorLogService {
     return requestBody
         .replaceAll(RegExp(r'"password"\s*:\s*"[^"]*"'), '"password":"***"')
         .replaceAll(RegExp(r'"token"\s*:\s*"[^"]*"'), '"token":"***"')
-        .replaceAll(RegExp(r'"accessToken"\s*:\s*"[^"]*"'), '"accessToken":"***"')
-        .replaceAll(RegExp(r'"refreshToken"\s*:\s*"[^"]*"'), '"refreshToken":"***"');
+        .replaceAll(
+          RegExp(r'"accessToken"\s*:\s*"[^"]*"'),
+          '"accessToken":"***"',
+        )
+        .replaceAll(
+          RegExp(r'"refreshToken"\s*:\s*"[^"]*"'),
+          '"refreshToken":"***"',
+        );
   }
 }

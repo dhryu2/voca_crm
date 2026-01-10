@@ -2,7 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:voca_crm/core/notification/business_place_change_notifier.dart';
+import 'package:voca_crm/core/notification/member_change_notifier.dart';
+import 'package:voca_crm/presentation/viewmodels/user_view_model.dart';
 import 'package:voca_crm/core/theme/theme_color.dart';
 import 'package:voca_crm/core/utils/message_handler.dart';
 import 'package:voca_crm/data/datasource/business_place_service.dart';
@@ -60,12 +63,17 @@ class _CustomersScreenState extends State<CustomersScreen> {
   @override
   void initState() {
     super.initState();
-    // Set default business place filter to user's default
-    _selectedBusinessPlaceFilter = widget.user.defaultBusinessPlaceId;
-    if (kDebugMode) {
-      debugPrint('[CustomersScreen] initState - defaultBusinessPlaceId: ${widget.user.defaultBusinessPlaceId}');
-    }
-    _initializeData();
+
+    // UserViewModel에서 최신 defaultBusinessPlaceId 가져오기
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final userViewModel = Provider.of<UserViewModel>(context, listen: false);
+      final currentUser = userViewModel.user;
+      _selectedBusinessPlaceFilter = currentUser?.defaultBusinessPlaceId ?? widget.user.defaultBusinessPlaceId;
+      if (kDebugMode) {
+        debugPrint('[CustomersScreen] initState - defaultBusinessPlaceId: $_selectedBusinessPlaceFilter');
+      }
+      _initializeData();
+    });
 
     // Listen to business place changes
     _businessPlaceChangeSubscription = BusinessPlaceChangeNotifier().stream
@@ -73,6 +81,27 @@ class _CustomersScreenState extends State<CustomersScreen> {
           // Reload business places when any change occurs
           _loadBusinessPlaces();
         });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // UserViewModel의 defaultBusinessPlaceId 변경 감지
+    final userViewModel = Provider.of<UserViewModel>(context);
+    final newDefaultBusinessPlaceId = userViewModel.user?.defaultBusinessPlaceId;
+
+    // 기본 사업장이 변경되었고, 현재 선택된 사업장이 없으면 새 기본값 사용
+    if (newDefaultBusinessPlaceId != null &&
+        newDefaultBusinessPlaceId.isNotEmpty &&
+        (_selectedBusinessPlaceFilter == null || _selectedBusinessPlaceFilter!.isEmpty)) {
+      if (kDebugMode) {
+        debugPrint('[CustomersScreen] didChangeDependencies - updating to: $newDefaultBusinessPlaceId');
+      }
+      setState(() {
+        _selectedBusinessPlaceFilter = newDefaultBusinessPlaceId;
+      });
+      _loadMembers();
+    }
   }
 
   Future<void> _initializeData() async {
@@ -530,6 +559,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                   '고객이 추가되었습니다',
                                 );
                                 _loadMembers();
+                                // 회원 추가 이벤트 발행
+                                MemberChangeNotifier().notifyCreated(
+                                  businessPlaceId: selectedBusinessPlaceId,
+                                );
                               }
                             } catch (e, stackTrace) {
                               if (context.mounted) {
@@ -1648,6 +1681,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                 '고객이 삭제 대기 상태로 전환되었습니다',
                               );
                               _loadMembers();
+                              // 회원 삭제 이벤트 발행
+                              MemberChangeNotifier().notifyDeleted(
+                                memberId: member.id,
+                                businessPlaceId: member.businessPlaceId,
+                              );
                             }
                           } catch (e, stackTrace) {
                             if (context.mounted) {

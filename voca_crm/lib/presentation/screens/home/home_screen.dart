@@ -36,10 +36,31 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _error;
   bool _isBriefingLoading = false;
 
+  // 마지막으로 로드한 사업장 ID (중복 로드 방지)
+  String? _lastLoadedBusinessPlaceId;
+
   @override
   void initState() {
     super.initState();
-    _loadData();
+    // UserViewModel에서 최신 데이터를 가져오기 위해 postFrameCallback 사용
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadData();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // UserViewModel의 defaultBusinessPlaceId 변경 감지
+    final userViewModel = Provider.of<UserViewModel>(context);
+    final newDefaultBusinessPlaceId = userViewModel.user?.defaultBusinessPlaceId;
+
+    // 기본 사업장이 변경되면 데이터 다시 로드
+    if (newDefaultBusinessPlaceId != null &&
+        newDefaultBusinessPlaceId.isNotEmpty &&
+        newDefaultBusinessPlaceId != _lastLoadedBusinessPlaceId) {
+      _loadData();
+    }
   }
 
   Future<void> _moveBusinessPage() async {
@@ -71,6 +92,15 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           _isLoading = false;
           _error = '기본 사업장이 설정되지 않았습니다';
+          _lastLoadedBusinessPlaceId = null;
+        });
+        return;
+      }
+
+      // 중복 로드 방지: 이미 같은 사업장 데이터를 로드했으면 스킵
+      if (businessPlaceId == _lastLoadedBusinessPlaceId && _statistics != null) {
+        setState(() {
+          _isLoading = false;
         });
         return;
       }
@@ -93,6 +123,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _todaySchedule = todaySchedule;
         _recentActivities = activities;
         _isLoading = false;
+        _lastLoadedBusinessPlaceId = businessPlaceId;
       });
     } catch (e, stackTrace) {
       setState(() {
