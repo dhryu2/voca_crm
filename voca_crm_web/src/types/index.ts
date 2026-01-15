@@ -49,7 +49,9 @@ export interface Member {
   remark?: string;
   createdAt: string;
   updatedAt: string;
+  isDeleted?: boolean;
   deletedAt?: string;
+  deletedBy?: string;
 }
 
 export interface MemberWithMemo extends Member {
@@ -66,6 +68,7 @@ export interface Memo {
   createdAt: string;
   updatedAt: string;
   deletedAt?: string;
+  deleteRequestedAt?: string;
 }
 
 // Reservation Types
@@ -93,6 +96,11 @@ export interface Visit {
   memberName?: string;
   businessPlaceId: string;
   visitTime: string;
+  note?: string;
+}
+
+export interface CheckInRequest {
+  memberId: string;
   note?: string;
 }
 
@@ -248,4 +256,68 @@ export interface AdminBusinessPlace {
   lastActivityAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// BusinessPlace Access Request Types
+export type BusinessPlaceRole = 'OWNER' | 'MANAGER' | 'STAFF';
+export type AccessRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface BusinessPlaceAccessRequest {
+  id: string;
+  userId: string;
+  businessPlaceId: string;
+  role: BusinessPlaceRole;
+  status: AccessRequestStatus;
+  requestedAt: string;
+  processedAt?: string;
+  processedBy?: string;
+  isReadByRequester: boolean;
+  createdAt: string;
+  updatedAt: string;
+  // 요청자 정보
+  requesterName?: string;
+  requesterPhone?: string;
+  requesterEmail?: string;
+  // 사업장 정보
+  businessPlaceName?: string;
+}
+
+export interface BusinessPlaceMember {
+  userBusinessPlaceId: string;
+  userId: string;
+  businessPlaceId: string;
+  role: BusinessPlaceRole;
+  username?: string;
+  phone?: string;
+  email?: string;
+  displayName?: string;
+  joinedAt: string;
+}
+
+// Statistics Advanced Types (Trend Charts)
+export interface TimeSeriesDataPoint {
+  date: string;
+  count: number;
+}
+
+export interface MemberRegistrationTrend {
+  dataPoints: TimeSeriesDataPoint[];
+  totalNewMembers: number;
+}
+
+export interface MemberGradeDistribution {
+  distribution: Record<string, number>;
+  totalMembers: number;
+}
+
+export interface ReservationTrend {
+  dataPoints: TimeSeriesDataPoint[];
+  totalReservations: number;
+}
+
+export interface MemoStatistics {
+  totalMemos: number;
+  importantMemos: number;
+  archivedMemos: number;
+  dailyMemos: TimeSeriesDataPoint[];
 }
