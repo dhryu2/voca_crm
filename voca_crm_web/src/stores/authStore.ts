@@ -19,7 +19,7 @@ interface AuthState {
   login: (provider: string, token: string) => Promise<User>;
   signupWithProvider: (provider: OAuthProvider, params: SignupUserParams) => Promise<User>;
   signup: (params: SignupParams) => Promise<User>;
-  logout: () => void;
+  logout: () => Promise<void>;
   loadUserFromToken: () => Promise<void>;
   fetchBusinessPlaces: () => Promise<void>;
 }
@@ -212,7 +212,10 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      logout: () => {
+      logout: async () => {
+        // 서버에 로그아웃 요청 (refresh token 폐기)
+        await apiClient.logoutFromServer();
+        // 로컬 토큰 삭제
         apiClient.clearTokens();
         set({
           user: null,
@@ -224,18 +227,42 @@ export const useAuthStore = create<AuthState>()(
 
       loadUserFromToken: async () => {
         const accessToken = apiClient.getAccessToken();
+
+        // 토큰이 없으면 비인증 상태
         if (!accessToken) {
           set({ isAuthenticated: false, user: null });
           return;
         }
 
-        const user = parseJwt(accessToken);
-        if (user) {
-          set({ user, isAuthenticated: true });
-          await get().fetchBusinessPlaces();
-        } else {
-          apiClient.clearTokens();
-          set({ isAuthenticated: false, user: null });
+        // 토큰 만료 여부 확인
+        if (!apiClient.hasValidToken()) {
+          // Access token 만료 - refresh 시도
+          try {
+            const refreshed = await apiClient.tryRefresh();
+            if (!refreshed) {
+              // Refresh 실패 - 로그아웃 상태로
+              apiClient.clearTokens();
+              set({ isAuthenticated: false, user: null });
+              return;
+            }
+          } catch {
+            apiClient.clearTokens();
+            set({ isAuthenticated: false, user: null });
+            return;
+          }
+        }
+
+        // 유효한 토큰으로 사용자 정보 파싱
+        const validToken = apiClient.getAccessToken();
+        if (validToken) {
+          const user = parseJwt(validToken);
+          if (user) {
+            set({ user, isAuthenticated: true });
+            await get().fetchBusinessPlaces();
+          } else {
+            apiClient.clearTokens();
+            set({ isAuthenticated: false, user: null });
+          }
         }
       },
 

@@ -1,6 +1,11 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HotkeysProvider, useHotkeys } from 'react-hotkeys-hook';
 import { useAuthStore } from '@/stores/authStore';
+import { useUIStore } from '@/stores/uiStore';
+import { apiClient } from '@/lib/api';
 import { MainLayout, AuthGuard, AdminGuard, AdminLayout } from '@/components/layout';
+import { CommandPalette, KeyboardShortcutsHelp } from '@/components/ui';
 import {
   LandingPage,
   LoginPage,
@@ -27,6 +32,31 @@ function RootRedirect() {
   return <Navigate to={isAuthenticated ? '/dashboard' : '/'} replace />;
 }
 
+// 전역 단축키 훅 컴포넌트
+function GlobalShortcuts() {
+  const { toggleCommandPalette, toggleShortcutsHelp, closeCommandPalette, closeShortcutsHelp, isCommandPaletteOpen, isShortcutsHelpOpen } = useUIStore();
+
+  // Ctrl+K: 명령어 팔레트
+  useHotkeys('ctrl+k, meta+k', (e) => {
+    e.preventDefault();
+    toggleCommandPalette();
+  }, { enableOnFormTags: true });
+
+  // Ctrl+/: 단축키 도움말
+  useHotkeys('ctrl+/, meta+/', (e) => {
+    e.preventDefault();
+    toggleShortcutsHelp();
+  }, { enableOnFormTags: true });
+
+  // ESC: 모달 닫기
+  useHotkeys('escape', () => {
+    if (isCommandPaletteOpen) closeCommandPalette();
+    else if (isShortcutsHelpOpen) closeShortcutsHelp();
+  }, { enableOnFormTags: true });
+
+  return null;
+}
+
 // Public route wrapper - redirects to dashboard if already logged in
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore();
@@ -39,8 +69,20 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
+  const { isCommandPaletteOpen, isShortcutsHelpOpen, closeCommandPalette, closeShortcutsHelp } = useUIStore();
+
+  useEffect(() => {
+    // 인증 실패 시 (401 + refresh 실패) 자동 로그아웃 처리
+    apiClient.setOnAuthFailed(() => {
+      useAuthStore.getState().logout();
+      // 리다이렉트는 AuthGuard에서 처리됨
+    });
+  }, []);
+
   return (
-    <BrowserRouter>
+    <HotkeysProvider>
+      <GlobalShortcuts />
+      <BrowserRouter>
       <Routes>
         {/* Public Routes */}
         <Route
@@ -185,7 +227,10 @@ function App() {
         {/* Catch-all redirect */}
         <Route path="*" element={<RootRedirect />} />
       </Routes>
-    </BrowserRouter>
+      </BrowserRouter>
+      <CommandPalette isOpen={isCommandPaletteOpen} onClose={closeCommandPalette} />
+      <KeyboardShortcutsHelp isOpen={isShortcutsHelpOpen} onClose={closeShortcutsHelp} />
+    </HotkeysProvider>
   );
 }
 
