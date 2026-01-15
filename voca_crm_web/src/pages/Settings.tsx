@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   User,
   Building2,
@@ -10,6 +10,12 @@ import {
   Edit,
   Plus,
   Trash2,
+  Send,
+  Inbox,
+  Users,
+  Check,
+  X,
+  RefreshCw,
 } from 'lucide-react';
 import {
   Card,
@@ -20,13 +26,19 @@ import {
   Input,
   Badge,
   SlidePanel,
+  EmptyState,
 } from '@/components/ui';
 import { useAuthStore } from '@/stores/authStore';
 import { apiClient } from '@/lib/api';
-import { formatPhoneNumber, cn } from '@/lib/utils';
-import type { BusinessPlace } from '@/types';
+import { formatPhoneNumber, cn, formatDate } from '@/lib/utils';
+import type {
+  BusinessPlace,
+  BusinessPlaceAccessRequest,
+  BusinessPlaceMember,
+  BusinessPlaceRole
+} from '@/types';
 
-type SettingsTab = 'profile' | 'business' | 'notifications' | 'account';
+type SettingsTab = 'profile' | 'business' | 'requests' | 'notifications' | 'account';
 
 export function SettingsPage() {
   const { user, businessPlaces, currentBusinessPlace, setCurrentBusinessPlace, logout } = useAuthStore();
@@ -35,12 +47,59 @@ export function SettingsPage() {
   const [isBusinessFormOpen, setIsBusinessFormOpen] = useState(false);
   const [editingBusinessPlace, setEditingBusinessPlace] = useState<BusinessPlace | null>(null);
 
-  const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
+  // 접근 요청 관련 상태
+  const [sentRequests, setSentRequests] = useState<BusinessPlaceAccessRequest[]>([]);
+  const [receivedRequests, setReceivedRequests] = useState<BusinessPlaceAccessRequest[]>([]);
+  const [members, setMembers] = useState<BusinessPlaceMember[]>([]);
+  const [requestsLoading, setRequestsLoading] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  const tabs: { id: SettingsTab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'profile', label: '프로필', icon: <User className="w-5 h-5" /> },
     { id: 'business', label: '사업장 관리', icon: <Building2 className="w-5 h-5" /> },
+    { id: 'requests', label: '접근 요청', icon: <Inbox className="w-5 h-5" />, badge: pendingCount },
     { id: 'notifications', label: '알림 설정', icon: <Bell className="w-5 h-5" /> },
     { id: 'account', label: '계정 설정', icon: <Shield className="w-5 h-5" /> },
   ];
+
+  // 접근 요청 데이터 로드
+  const loadAccessRequests = useCallback(async () => {
+    setRequestsLoading(true);
+    try {
+      const [sent, received, count] = await Promise.all([
+        apiClient.get<BusinessPlaceAccessRequest[]>('/business-places/requests/sent'),
+        apiClient.get<BusinessPlaceAccessRequest[]>('/business-places/requests/received'),
+        apiClient.get<number>('/business-places/requests/pending-count'),
+      ]);
+      setSentRequests(sent);
+      setReceivedRequests(received);
+      setPendingCount(count);
+    } catch (err) {
+      console.error('접근 요청 로드 실패:', err);
+    } finally {
+      setRequestsLoading(false);
+    }
+  }, []);
+
+  // 사업장 멤버 로드
+  const loadMembers = useCallback(async () => {
+    if (!currentBusinessPlace?.id) return;
+    try {
+      const data = await apiClient.get<BusinessPlaceMember[]>(
+        `/business-places/${currentBusinessPlace.id}/members`
+      );
+      setMembers(data);
+    } catch (err) {
+      console.error('멤버 로드 실패:', err);
+    }
+  }, [currentBusinessPlace?.id]);
+
+  useEffect(() => {
+    if (activeTab === 'requests') {
+      loadAccessRequests();
+      loadMembers();
+    }
+  }, [activeTab, loadAccessRequests, loadMembers]);
 
   const handleLogout = () => {
     if (confirm('로그아웃 하시겠습니까?')) {
@@ -96,7 +155,12 @@ export function SettingsPage() {
                     )}
                   >
                     {tab.icon}
-                    <span className="font-medium">{tab.label}</span>
+                    <span className="font-medium flex-1">{tab.label}</span>
+                    {tab.badge && tab.badge > 0 && (
+                      <span className="bg-red-500 text-white text-xs font-medium px-2 py-0.5 rounded-full">
+                        {tab.badge}
+                      </span>
+                    )}
                   </button>
                 ))}
               </nav>
@@ -269,6 +333,20 @@ export function SettingsPage() {
                 )}
               </CardContent>
             </Card>
+          )}
+
+          {activeTab === 'requests' && (
+            <AccessRequestsSection
+              sentRequests={sentRequests}
+              receivedRequests={receivedRequests}
+              members={members}
+              isLoading={requestsLoading}
+              currentBusinessPlace={currentBusinessPlace}
+              onRefresh={() => {
+                loadAccessRequests();
+                loadMembers();
+              }}
+            />
           )}
 
           {activeTab === 'notifications' && (
@@ -585,6 +663,439 @@ function BusinessPlaceForm({ businessPlace, onSuccess, onCancel }: BusinessPlace
       <div className="flex gap-3 pt-4">
         <Button type="submit" className="flex-1" isLoading={isLoading}>
           {businessPlace ? '수정' : '추가'}
+        </Button>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          취소
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+// Access Requests Section Component
+interface AccessRequestsSectionProps {
+  sentRequests: BusinessPlaceAccessRequest[];
+  receivedRequests: BusinessPlaceAccessRequest[];
+  members: BusinessPlaceMember[];
+  isLoading: boolean;
+  currentBusinessPlace: BusinessPlace | null;
+  onRefresh: () => void;
+}
+
+function AccessRequestsSection({
+  sentRequests,
+  receivedRequests,
+  members,
+  isLoading,
+  currentBusinessPlace,
+  onRefresh,
+}: AccessRequestsSectionProps) {
+  const [requestFormOpen, setRequestFormOpen] = useState(false);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+
+  // 현재 사업장에서 Owner인지 확인
+  const { businessPlaces } = useAuthStore();
+  const currentBpWithRole = businessPlaces.find(
+    (bp) => bp.id === currentBusinessPlace?.id
+  );
+  const isOwner = (currentBpWithRole as any)?.role === 'OWNER';
+
+  const handleApprove = async (requestId: string) => {
+    setProcessingId(requestId);
+    try {
+      await apiClient.put(`/business-places/requests/${requestId}/approve`);
+      onRefresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '승인 실패');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleReject = async (requestId: string) => {
+    if (!confirm('정말 거절하시겠습니까?')) return;
+    setProcessingId(requestId);
+    try {
+      await apiClient.put(`/business-places/requests/${requestId}/reject`);
+      onRefresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '거절 실패');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleDeleteRequest = async (requestId: string) => {
+    if (!confirm('요청을 취소하시겠습니까?')) return;
+    setProcessingId(requestId);
+    try {
+      await apiClient.delete(`/business-places/requests/${requestId}`);
+      onRefresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '취소 실패');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleRoleChange = async (userBusinessPlaceId: string, role: BusinessPlaceRole) => {
+    try {
+      await apiClient.put(`/business-places/members/${userBusinessPlaceId}/role?role=${role}`);
+      onRefresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '역할 변경 실패');
+    }
+  };
+
+  const handleRemoveMember = async (member: BusinessPlaceMember) => {
+    const displayName = member.displayName || member.username || '알 수 없음';
+    if (!confirm(`${displayName}님을 사업장에서 탈퇴시키겠습니까?`)) return;
+    try {
+      await apiClient.delete(`/business-places/members/${member.userBusinessPlaceId}`);
+      onRefresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '탈퇴 처리 실패');
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'PENDING':
+        return <Badge variant="warning">대기</Badge>;
+      case 'APPROVED':
+        return <Badge variant="success">승인</Badge>;
+      case 'REJECTED':
+        return <Badge variant="error">거절</Badge>;
+      default:
+        return <Badge>{status}</Badge>;
+    }
+  };
+
+  const getRoleBadge = (role: string) => {
+    switch (role) {
+      case 'OWNER':
+        return <Badge variant="info">소유자</Badge>;
+      case 'MANAGER':
+        return <Badge variant="success">관리자</Badge>;
+      case 'STAFF':
+        return <Badge>직원</Badge>;
+      default:
+        return <Badge>{role}</Badge>;
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* 새 접근 요청 */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Send className="w-5 h-5" />
+            사업장 접근 요청
+          </CardTitle>
+          <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onRefresh}
+              leftIcon={<RefreshCw className="w-4 h-4" />}
+            >
+              새로고침
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => setRequestFormOpen(true)}
+              leftIcon={<Plus className="w-4 h-4" />}
+            >
+              요청 보내기
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {sentRequests.length === 0 ? (
+            <EmptyState
+              icon={<Send className="w-6 h-6" />}
+              title="보낸 요청이 없습니다"
+              description="다른 사업장에 접근을 요청해보세요"
+              className="py-8"
+            />
+          ) : (
+            <div className="space-y-3">
+              {sentRequests.map((request) => (
+                <div
+                  key={request.id}
+                  className="flex items-center gap-4 p-4 rounded-lg bg-gray-50"
+                >
+                  <div className="flex-1">
+                    <p className="font-medium text-gray-900">
+                      {request.businessPlaceName || request.businessPlaceId}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {request.role === 'MANAGER' ? '관리자' : '직원'}로 요청 |{' '}
+                      {formatDate(request.requestedAt)}
+                    </p>
+                  </div>
+                  {getStatusBadge(request.status)}
+                  {request.status === 'PENDING' && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteRequest(request.id)}
+                      disabled={processingId === request.id}
+                      className="text-red-500 hover:text-red-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* 받은 요청 (Owner만 표시) */}
+      {isOwner && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Inbox className="w-5 h-5" />
+              받은 요청
+              {receivedRequests.filter((r) => r.status === 'PENDING').length > 0 && (
+                <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                  {receivedRequests.filter((r) => r.status === 'PENDING').length}
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {receivedRequests.length === 0 ? (
+              <EmptyState
+                icon={<Inbox className="w-6 h-6" />}
+                title="받은 요청이 없습니다"
+                className="py-8"
+              />
+            ) : (
+              <div className="space-y-3">
+                {receivedRequests.map((request) => (
+                  <div
+                    key={request.id}
+                    className="flex items-center gap-4 p-4 rounded-lg bg-gray-50"
+                  >
+                    <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
+                      <span className="text-primary-700 font-medium">
+                        {(request.requesterName || '?').charAt(0)}
+                      </span>
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900">
+                        {request.requesterName || request.userId}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {request.requesterEmail || ''} |{' '}
+                        {request.role === 'MANAGER' ? '관리자' : '직원'}로 요청
+                      </p>
+                    </div>
+                    {getStatusBadge(request.status)}
+                    {request.status === 'PENDING' && (
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => handleApprove(request.id)}
+                          disabled={processingId === request.id}
+                          leftIcon={<Check className="w-4 h-4" />}
+                        >
+                          승인
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleReject(request.id)}
+                          disabled={processingId === request.id}
+                          leftIcon={<X className="w-4 h-4" />}
+                        >
+                          거절
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 사업장 멤버 관리 (Owner만 표시) */}
+      {isOwner && currentBusinessPlace && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="w-5 h-5" />
+              {currentBusinessPlace.name} 멤버 관리
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {members.length === 0 ? (
+              <EmptyState
+                icon={<Users className="w-6 h-6" />}
+                title="멤버가 없습니다"
+                className="py-8"
+              />
+            ) : (
+              <div className="space-y-3">
+                {members.map((member) => (
+                  <div
+                    key={member.userBusinessPlaceId}
+                    className="flex items-center gap-4 p-4 rounded-lg bg-gray-50"
+                  >
+                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                      <span className="text-blue-700 font-medium">
+                        {(member.displayName || member.username || '?').charAt(0)}
+                      </span>
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900">
+                        {member.displayName || member.username || '알 수 없음'}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {member.email || ''} | 가입일: {formatDate(member.joinedAt)}
+                      </p>
+                    </div>
+                    {member.role === 'OWNER' ? (
+                      getRoleBadge(member.role)
+                    ) : (
+                      <select
+                        value={member.role}
+                        onChange={(e) =>
+                          handleRoleChange(
+                            member.userBusinessPlaceId,
+                            e.target.value as BusinessPlaceRole
+                          )
+                        }
+                        className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm"
+                      >
+                        <option value="MANAGER">관리자</option>
+                        <option value="STAFF">직원</option>
+                      </select>
+                    )}
+                    {member.role !== 'OWNER' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveMember(member)}
+                        className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 접근 요청 폼 패널 */}
+      <SlidePanel
+        isOpen={requestFormOpen}
+        onClose={() => setRequestFormOpen(false)}
+        title="사업장 접근 요청"
+        width="md"
+      >
+        <AccessRequestForm
+          onSuccess={() => {
+            setRequestFormOpen(false);
+            onRefresh();
+          }}
+          onCancel={() => setRequestFormOpen(false)}
+        />
+      </SlidePanel>
+    </div>
+  );
+}
+
+// Access Request Form
+interface AccessRequestFormProps {
+  onSuccess: () => void;
+  onCancel: () => void;
+}
+
+function AccessRequestForm({ onSuccess, onCancel }: AccessRequestFormProps) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [formData, setFormData] = useState({
+    businessPlaceId: '',
+    role: 'STAFF' as BusinessPlaceRole,
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.businessPlaceId.trim()) {
+      setError('사업장 ID를 입력해주세요.');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      await apiClient.post(
+        `/business-places/${formData.businessPlaceId}/request-access?role=${formData.role}`
+      );
+      onSuccess();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '요청 전송 실패');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {error && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {error}
+        </div>
+      )}
+
+      <Input
+        label="사업장 ID"
+        placeholder="접근하려는 사업장의 ID를 입력하세요"
+        value={formData.businessPlaceId}
+        onChange={(e) => setFormData({ ...formData, businessPlaceId: e.target.value })}
+        required
+      />
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">요청 역할</label>
+        <select
+          value={formData.role}
+          onChange={(e) =>
+            setFormData({ ...formData, role: e.target.value as BusinessPlaceRole })
+          }
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+        >
+          <option value="STAFF">직원</option>
+          <option value="MANAGER">관리자</option>
+        </select>
+        <p className="mt-1 text-sm text-gray-500">
+          사업장 소유자가 요청을 승인하면 해당 역할로 접근할 수 있습니다.
+        </p>
+      </div>
+
+      <div className="flex gap-3 pt-4">
+        <Button type="submit" className="flex-1" isLoading={isLoading}>
+          요청 전송
         </Button>
         <Button type="button" variant="outline" onClick={onCancel}>
           취소
