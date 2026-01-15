@@ -3,18 +3,20 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui';
 import { Mic, ArrowLeft } from 'lucide-react';
-import type { OAuthProvider } from '@/lib/oauth';
+import { OAuthError, type OAuthProvider } from '@/lib/oauth';
 
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { loginWithProvider, isLoading } = useAuthStore();
   const [error, setError] = useState<string | null>(null);
+  const [loadingProvider, setLoadingProvider] = useState<OAuthProvider | null>(null);
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboard';
 
   const handleSocialLogin = async (provider: OAuthProvider) => {
     setError(null);
+    setLoadingProvider(provider);
 
     try {
       await loginWithProvider(provider);
@@ -26,10 +28,21 @@ export function LoginPage() {
           navigate('/signup', { state: { provider, from } });
           return;
         }
+
+        // OAuthError인 경우 코드별 처리
+        if (err instanceof OAuthError) {
+          if (err.code === 'CANCELLED') {
+            // 취소는 에러 메시지 표시하지 않음
+            return;
+          }
+        }
+
         setError(err.message);
       } else {
-        setError('로그인에 실패했습니다.');
+        setError('로그인에 실패했습니다. 잠시 후 다시 시도해주세요.');
       }
+    } finally {
+      setLoadingProvider(null);
     }
   };
 
@@ -93,7 +106,8 @@ export function LoginPage() {
               variant="outline"
               className="w-full h-12 justify-center gap-3"
               onClick={() => handleSocialLogin('google')}
-              disabled={isLoading}
+              disabled={isLoading || loadingProvider !== null}
+              isLoading={loadingProvider === 'google'}
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path
@@ -113,14 +127,15 @@ export function LoginPage() {
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                 />
               </svg>
-              Google로 계속하기
+              {loadingProvider === 'google' ? '로그인 중...' : 'Google로 계속하기'}
             </Button>
 
             {/* Kakao Login */}
             <Button
               className="w-full h-12 justify-center gap-3 bg-[#FEE500] text-[#191919] hover:bg-[#FDD800]"
               onClick={() => handleSocialLogin('kakao')}
-              disabled={isLoading}
+              disabled={isLoading || loadingProvider !== null}
+              isLoading={loadingProvider === 'kakao'}
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path
@@ -128,14 +143,15 @@ export function LoginPage() {
                   d="M12 3c5.8 0 10.5 3.664 10.5 8.185 0 4.52-4.7 8.184-10.5 8.184a13.5 13.5 0 0 1-1.727-.11l-4.408 2.883c-.501.265-.678.236-.472-.413l.892-3.678c-2.88-1.46-4.785-3.99-4.785-6.866C1.5 6.665 6.2 3 12 3z"
                 />
               </svg>
-              Kakao로 계속하기
+              {loadingProvider === 'kakao' ? '로그인 중...' : 'Kakao로 계속하기'}
             </Button>
 
             {/* Apple Login */}
             <Button
               className="w-full h-12 justify-center gap-3 bg-black text-white hover:bg-gray-900"
               onClick={() => handleSocialLogin('apple')}
-              disabled={isLoading}
+              disabled={isLoading || loadingProvider !== null}
+              isLoading={loadingProvider === 'apple'}
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path
@@ -143,7 +159,7 @@ export function LoginPage() {
                   d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"
                 />
               </svg>
-              Apple로 계속하기
+              {loadingProvider === 'apple' ? '로그인 중...' : 'Apple로 계속하기'}
             </Button>
           </div>
 
