@@ -42,8 +42,28 @@ class ApiClient {
     return this.accessToken;
   }
 
+  /**
+   * JWT 토큰 만료 여부 확인
+   * @param token JWT 토큰 문자열
+   * @returns 만료되었으면 true, 유효하면 false
+   */
+  private isTokenExpired(token: string): boolean {
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const payload = JSON.parse(atob(base64));
+      // exp는 초 단위, Date.now()는 밀리초 단위
+      return payload.exp * 1000 < Date.now();
+    } catch {
+      return true; // 파싱 실패 시 만료로 간주
+    }
+  }
+
+  /**
+   * 유효한 토큰 보유 여부 확인 (존재 여부 + 만료 여부)
+   */
   hasValidToken(): boolean {
-    return !!this.accessToken;
+    return !!this.accessToken && !this.isTokenExpired(this.accessToken);
   }
 
   private async refreshAccessToken(): Promise<boolean> {
@@ -83,13 +103,23 @@ class ApiClient {
       ...options.headers,
     };
 
+    // 토큰이 만료됐으면 요청 전에 선제적으로 갱신 시도
+    if (this.accessToken && this.isTokenExpired(this.accessToken) && this.refreshToken) {
+      const refreshed = await this.refreshAccessToken();
+      if (!refreshed) {
+        this.clearTokens();
+        this.onAuthFailed?.();
+        throw new ApiError('인증이 만료되었습니다. 다시 로그인해주세요.', 401);
+      }
+    }
+
     if (this.accessToken) {
       (headers as Record<string, string>)['Authorization'] = `Bearer ${this.accessToken}`;
     }
 
     let response = await fetch(url, { ...options, headers });
 
-    // Handle 401 - try to refresh token
+    // Handle 401 - try to refresh token (서버에서 토큰 무효화된 경우)
     if (response.status === 401 && this.refreshToken) {
       const refreshed = await this.refreshAccessToken();
       if (refreshed) {
@@ -151,6 +181,31 @@ class ApiClient {
 
   delete<T>(endpoint: string): Promise<T> {
     return this.request<T>(endpoint, { method: 'DELETE' });
+  }
+
+  /**
+   * 서버에 로그아웃 요청 (refresh token 폐기)
+   * 로그아웃 실패해도 로컬 토큰은 삭제해야 하므로 에러를 무시함
+   */
+  async logoutFromServer(): Promise<void> {
+    if (!this.refreshToken) return;
+    try {
+      await fetch(`${API_BASE_URL}/api/auth/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: this.refreshToken }),
+      });
+    } catch {
+      // 로그아웃 실패해도 로컬 토큰은 삭제
+    }
+  }
+
+  /**
+   * 토큰 갱신 시도 (외부에서 호출 가능)
+   * @returns 갱신 성공 여부
+   */
+  async tryRefresh(): Promise<boolean> {
+    return this.refreshAccessToken();
   }
 }
 
