@@ -1,5 +1,6 @@
 package com.vocacrm.api.service;
 
+import com.vocacrm.api.exception.ResourceNotFoundException;
 import com.vocacrm.api.model.ErrorLog;
 import com.vocacrm.api.model.ErrorLog.ErrorSeverity;
 import com.vocacrm.api.repository.ErrorLogRepository;
@@ -95,7 +96,7 @@ public class ErrorLogService {
     @Transactional(readOnly = true)
     public ErrorLog getLogById(String id) {
         return errorLogRepository.findById(UUID.fromString(id))
-                .orElseThrow(() -> new RuntimeException("오류 로그를 찾을 수 없습니다: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("오류 로그를 찾을 수 없습니다: " + id));
     }
 
     /**
