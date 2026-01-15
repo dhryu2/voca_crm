@@ -8,6 +8,10 @@ import {
   User,
   Calendar,
   Filter,
+  Star,
+  RotateCcw,
+  AlertTriangle,
+  Clock,
 } from 'lucide-react';
 import {
   Card,
@@ -29,14 +33,17 @@ interface MemoWithMember extends Memo {
   member?: Member;
 }
 
-type FilterType = 'all' | 'today' | 'week';
+type FilterType = 'all' | 'today' | 'week' | 'important';
+type TabType = 'active' | 'deleted';
 
 export function MemosPage() {
   const { currentBusinessPlace } = useAuthStore();
   const [memos, setMemos] = useState<MemoWithMember[]>([]);
+  const [deletedMemos, setDeletedMemos] = useState<MemoWithMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<FilterType>('all');
+  const [activeTab, setActiveTab] = useState<TabType>('active');
   const [selectedMemo, setSelectedMemo] = useState<MemoWithMember | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -63,9 +70,30 @@ export function MemosPage() {
     }
   }, [currentBusinessPlace?.id]);
 
+  const loadDeletedMemos = useCallback(async () => {
+    if (!currentBusinessPlace?.id) return;
+
+    try {
+      const response = await apiClient.get<{ data: MemoWithMember[] }>(
+        '/memos/deleted',
+        { businessPlaceId: currentBusinessPlace.id }
+      );
+      const sorted = (response.data || []).sort(
+        (a, b) =>
+          new Date(b.deleteRequestedAt || b.createdAt).getTime() -
+          new Date(a.deleteRequestedAt || a.createdAt).getTime()
+      );
+      setDeletedMemos(sorted);
+    } catch (err) {
+      console.error('Failed to load deleted memos:', err);
+      setDeletedMemos([]);
+    }
+  }, [currentBusinessPlace?.id]);
+
   useEffect(() => {
     loadMemos();
-  }, [loadMemos]);
+    loadDeletedMemos();
+  }, [loadMemos, loadDeletedMemos]);
 
   const handleViewDetail = (memo: MemoWithMember) => {
     setSelectedMemo(memo);
@@ -85,15 +113,52 @@ export function MemosPage() {
     setIsFormOpen(true);
   };
 
-  const handleDelete = async (memo: MemoWithMember) => {
-    if (!confirm('이 메모를 삭제하시겠습니까?')) return;
+  const handleSoftDelete = async (memo: MemoWithMember) => {
+    if (!confirm('이 메모를 삭제 대기 상태로 이동하시겠습니까?')) return;
 
     try {
-      await apiClient.delete(`/memos/${memo.id}`);
+      await apiClient.delete(`/memos/${memo.id}/soft`);
       loadMemos();
+      loadDeletedMemos();
       setIsDetailOpen(false);
-    } catch (err) {
+    } catch {
       alert('삭제 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleRestore = async (memo: MemoWithMember) => {
+    try {
+      await apiClient.post(`/memos/${memo.id}/restore`);
+      loadMemos();
+      loadDeletedMemos();
+    } catch {
+      alert('복원 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handlePermanentDelete = async (memo: MemoWithMember) => {
+    if (!confirm('이 메모를 영구적으로 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return;
+
+    try {
+      await apiClient.delete(`/memos/${memo.id}/permanent`);
+      loadDeletedMemos();
+    } catch {
+      alert('영구 삭제 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleToggleImportant = async (memo: MemoWithMember, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    try {
+      const updated = await apiClient.patch<Memo>(`/memos/${memo.id}/toggle-important`);
+      setMemos((prev) =>
+        prev.map((m) => (m.id === memo.id ? { ...m, isImportant: updated.isImportant } : m))
+      );
+      if (selectedMemo?.id === memo.id) {
+        setSelectedMemo({ ...selectedMemo, isImportant: updated.isImportant });
+      }
+    } catch {
+      alert('중요 표시 변경 중 오류가 발생했습니다.');
     }
   };
 
@@ -107,19 +172,23 @@ export function MemosPage() {
       if (!matchesSearch) return false;
     }
 
-    // Apply date filter
+    // Apply filter
     if (filterType !== 'all') {
-      const memoDate = new Date(memo.createdAt);
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      if (filterType === 'important') {
+        if (!memo.isImportant) return false;
+      } else {
+        const memoDate = new Date(memo.createdAt);
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-      if (filterType === 'today') {
-        const memoDay = new Date(memoDate.getFullYear(), memoDate.getMonth(), memoDate.getDate());
-        if (memoDay.getTime() !== today.getTime()) return false;
-      } else if (filterType === 'week') {
-        const weekAgo = new Date(today);
-        weekAgo.setDate(weekAgo.getDate() - 7);
-        if (memoDate < weekAgo) return false;
+        if (filterType === 'today') {
+          const memoDay = new Date(memoDate.getFullYear(), memoDate.getMonth(), memoDate.getDate());
+          if (memoDay.getTime() !== today.getTime()) return false;
+        } else if (filterType === 'week') {
+          const weekAgo = new Date(today);
+          weekAgo.setDate(weekAgo.getDate() - 7);
+          if (memoDate < weekAgo) return false;
+        }
       }
     }
 
@@ -130,6 +199,7 @@ export function MemosPage() {
     { value: 'all', label: '전체' },
     { value: 'today', label: '오늘' },
     { value: 'week', label: '최근 7일' },
+    { value: 'important', label: '중요' },
   ];
 
   return (
@@ -145,48 +215,87 @@ export function MemosPage() {
         </Button>
       </div>
 
-      {/* Search & Filters */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center gap-4">
-            <div className="flex-1 max-w-md">
-              <Input
-                placeholder="내용 또는 고객명으로 검색..."
-                leftIcon={<Search className="w-4 h-4" />}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-gray-400" />
-              {filterOptions.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => setFilterType(option.value)}
-                  className={cn(
-                    'px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
-                    filterType === option.value
-                      ? 'bg-primary-100 text-primary-700'
-                      : 'text-gray-500 hover:bg-gray-100'
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            <Badge variant="default">{filteredMemos.length}건</Badge>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-gray-200">
+        <button
+          onClick={() => setActiveTab('active')}
+          className={cn(
+            'px-4 py-2.5 text-sm font-medium border-b-2 transition-colors',
+            activeTab === 'active'
+              ? 'border-primary-600 text-primary-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          )}
+        >
+          <span className="flex items-center gap-2">
+            <FileText className="w-4 h-4" />
+            활성 메모
+            <Badge variant="default" className="ml-1">{memos.length}</Badge>
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveTab('deleted')}
+          className={cn(
+            'px-4 py-2.5 text-sm font-medium border-b-2 transition-colors',
+            activeTab === 'deleted'
+              ? 'border-primary-600 text-primary-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          )}
+        >
+          <span className="flex items-center gap-2">
+            <Clock className="w-4 h-4" />
+            삭제 대기
+            {deletedMemos.length > 0 && (
+              <Badge variant="error" className="ml-1">{deletedMemos.length}</Badge>
+            )}
+          </span>
+        </button>
+      </div>
 
-      {/* Memos List */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="w-5 h-5 text-gray-500" />
-            메모 목록
-          </CardTitle>
-        </CardHeader>
+      {/* Search & Filters - Only show for active tab */}
+      {activeTab === 'active' && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-4">
+              <div className="flex-1 max-w-md">
+                <Input
+                  placeholder="내용 또는 고객명으로 검색..."
+                  leftIcon={<Search className="w-4 h-4" />}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4 text-gray-400" />
+                {filterOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => setFilterType(option.value)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
+                      filterType === option.value
+                        ? 'bg-primary-100 text-primary-700'
+                        : 'text-gray-500 hover:bg-gray-100'
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <Badge variant="default">{filteredMemos.length}건</Badge>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Memos List - Active Tab */}
+      {activeTab === 'active' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-gray-500" />
+              메모 목록
+            </CardTitle>
+          </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
@@ -240,6 +349,18 @@ export function MemosPage() {
                   {/* Actions */}
                   <div className="flex items-center gap-1">
                     <button
+                      onClick={(e) => handleToggleImportant(memo, e)}
+                      className={cn(
+                        'p-2 rounded-lg transition-colors',
+                        memo.isImportant
+                          ? 'text-amber-500 hover:bg-amber-50'
+                          : 'text-gray-400 hover:bg-gray-100 hover:text-amber-500'
+                      )}
+                      title={memo.isImportant ? '중요 표시 해제' : '중요 표시'}
+                    >
+                      <Star className={cn('w-4 h-4', memo.isImportant && 'fill-current')} />
+                    </button>
+                    <button
                       onClick={(e) => {
                         e.stopPropagation();
                         handleEdit(memo);
@@ -251,7 +372,7 @@ export function MemosPage() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDelete(memo);
+                        handleSoftDelete(memo);
                       }}
                       className="p-2 rounded-lg hover:bg-red-50 transition-colors text-gray-400 hover:text-red-500"
                     >
@@ -264,6 +385,77 @@ export function MemosPage() {
           )}
         </CardContent>
       </Card>
+      )}
+
+      {/* Deleted Memos List - Deleted Tab */}
+      {activeTab === 'deleted' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              삭제 대기 메모
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {deletedMemos.length === 0 ? (
+              <EmptyState
+                icon={<Clock className="w-8 h-8" />}
+                title="삭제 대기 메모가 없습니다"
+                description="삭제된 메모가 없습니다"
+                className="py-12"
+              />
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {deletedMemos.map((memo) => (
+                  <div
+                    key={memo.id}
+                    className="flex items-start gap-4 px-6 py-4 bg-gray-50/50"
+                  >
+                    {/* Avatar */}
+                    <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center flex-shrink-0">
+                      <User className="w-5 h-5 text-gray-500" />
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="font-medium text-gray-700">
+                          {memo.memberName || '고객'}
+                        </p>
+                        <span className="text-gray-300">·</span>
+                        <p className="text-sm text-gray-400">
+                          삭제 요청: {memo.deleteRequestedAt ? formatDate(memo.deleteRequestedAt) : formatDate(memo.createdAt)}
+                        </p>
+                      </div>
+                      <p className="text-gray-500 line-clamp-2">{memo.content}</p>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleRestore(memo)}
+                        leftIcon={<RotateCcw className="w-4 h-4" />}
+                      >
+                        복원
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handlePermanentDelete(memo)}
+                        leftIcon={<Trash2 className="w-4 h-4" />}
+                      >
+                        영구 삭제
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Memo Detail Panel */}
       <SlidePanel
@@ -293,6 +485,21 @@ export function MemosPage() {
                 <Button
                   variant="outline"
                   size="sm"
+                  onClick={() => handleToggleImportant(selectedMemo)}
+                  leftIcon={
+                    <Star
+                      className={cn(
+                        'w-4 h-4',
+                        selectedMemo.isImportant && 'fill-amber-500 text-amber-500'
+                      )}
+                    />
+                  }
+                >
+                  {selectedMemo.isImportant ? '중요 해제' : '중요'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => handleEdit(selectedMemo)}
                   leftIcon={<Edit2 className="w-4 h-4" />}
                 >
@@ -301,7 +508,7 @@ export function MemosPage() {
                 <Button
                   variant="destructive"
                   size="sm"
-                  onClick={() => handleDelete(selectedMemo)}
+                  onClick={() => handleSoftDelete(selectedMemo)}
                   leftIcon={<Trash2 className="w-4 h-4" />}
                 >
                   삭제

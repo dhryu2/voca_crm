@@ -1,14 +1,16 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   Search,
   Plus,
-  MoreHorizontal,
   Phone,
   Mail,
   FileText,
   Edit,
   Trash2,
   User,
+  Download,
+  Upload,
+  RotateCcw,
 } from 'lucide-react';
 import {
   Card,
@@ -18,11 +20,15 @@ import {
   SlidePanel,
   Badge,
   EmptyState,
+  DataTable,
+  CSVUploader,
 } from '@/components/ui';
 import { useAuthStore } from '@/stores/authStore';
 import { apiClient } from '@/lib/api';
 import { formatPhoneNumber, formatDate } from '@/lib/utils';
+import { useCSVExport } from '@/hooks/useCSVExport';
 import type { Member, Memo } from '@/types';
+import type { ColumnDef } from '@tanstack/react-table';
 
 interface MemberWithLatestMemo extends Member {
   latestMemo?: Memo;
@@ -31,12 +37,17 @@ interface MemberWithLatestMemo extends Member {
 export function CustomersPage() {
   const { currentBusinessPlace, user } = useAuthStore();
   const [members, setMembers] = useState<MemberWithLatestMemo[]>([]);
+  const [deletedMembers, setDeletedMembers] = useState<MemberWithLatestMemo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMember, setSelectedMember] = useState<MemberWithLatestMemo | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
+  const [activeTab, setActiveTab] = useState<'active' | 'deleted'>('active');
+
+  const { exportToCSV } = useCSVExport<MemberWithLatestMemo>();
 
   const loadMembers = useCallback(async () => {
     if (!currentBusinessPlace?.id) return;
@@ -54,25 +65,201 @@ export function CustomersPage() {
     }
   }, [currentBusinessPlace?.id]);
 
-  useEffect(() => {
-    loadMembers();
-  }, [loadMembers]);
+  const loadDeletedMembers = useCallback(async () => {
+    if (!currentBusinessPlace?.id) return;
 
-  const filteredMembers = members.filter((member) => {
-    if (!searchQuery) return true;
+    setIsLoading(true);
+    try {
+      const response = await apiClient.get<{ data: MemberWithLatestMemo[] }>(
+        `/members/by-business-place/${currentBusinessPlace.id}?deleted=true`
+      );
+      setDeletedMembers(response.data || []);
+    } catch (err) {
+      console.error('Failed to load deleted members:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [currentBusinessPlace?.id]);
+
+  useEffect(() => {
+    if (activeTab === 'active') {
+      loadMembers();
+    } else {
+      loadDeletedMembers();
+    }
+  }, [activeTab, loadMembers, loadDeletedMembers]);
+
+  const filteredMembers = useMemo(() => {
+    const sourceMembers = activeTab === 'active' ? members : deletedMembers;
+    if (!searchQuery) return sourceMembers;
     const query = searchQuery.toLowerCase();
-    return (
+    return sourceMembers.filter((member) =>
       member.name.toLowerCase().includes(query) ||
       member.memberNumber.toLowerCase().includes(query) ||
       member.phone?.toLowerCase().includes(query) ||
       member.email?.toLowerCase().includes(query)
     );
-  });
+  }, [members, deletedMembers, activeTab, searchQuery]);
 
-  const handleViewDetail = (member: MemberWithLatestMemo) => {
+  const handleViewDetail = useCallback((member: MemberWithLatestMemo) => {
     setSelectedMember(member);
     setIsDetailOpen(true);
-  };
+  }, []);
+
+  // Column definitions (memoized)
+  const columns = useMemo<ColumnDef<MemberWithLatestMemo, unknown>[]>(() => [
+    {
+      id: 'select',
+      header: ({ table }) => (
+        <input
+          type="checkbox"
+          checked={table.getIsAllPageRowsSelected()}
+          onChange={table.getToggleAllPageRowsSelectedHandler()}
+          className="rounded border-gray-300"
+        />
+      ),
+      cell: ({ row }) => (
+        <input
+          type="checkbox"
+          checked={row.getIsSelected()}
+          onChange={row.getToggleSelectedHandler()}
+          onClick={(e) => e.stopPropagation()}
+          className="rounded border-gray-300"
+        />
+      ),
+      enableSorting: false,
+    },
+    {
+      accessorKey: 'memberNumber',
+      header: '번호',
+      cell: ({ row }) => (
+        <span className="text-gray-500">{row.original.memberNumber}</span>
+      ),
+    },
+    {
+      accessorKey: 'name',
+      header: '이름',
+      cell: ({ row }) => (
+        <span className="font-medium text-gray-900">{row.original.name}</span>
+      ),
+    },
+    {
+      accessorKey: 'phone',
+      header: '연락처',
+      cell: ({ row }) => (
+        <span className="text-gray-600">
+          {row.original.phone ? formatPhoneNumber(row.original.phone) : '-'}
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'email',
+      header: '이메일',
+      cell: ({ row }) => (
+        <span className="text-gray-600 truncate max-w-[150px] block">
+          {row.original.email || '-'}
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'grade',
+      header: '등급',
+      cell: ({ row }) =>
+        row.original.grade ? (
+          <Badge variant="info">{row.original.grade}</Badge>
+        ) : (
+          <span className="text-gray-400">-</span>
+        ),
+    },
+    {
+      accessorKey: 'latestMemo.content',
+      header: '최근 메모',
+      cell: ({ row }) => (
+        <span className="text-gray-500 truncate max-w-[200px] block">
+          {row.original.latestMemo?.content || '-'}
+        </span>
+      ),
+    },
+    {
+      id: 'actions',
+      header: '',
+      cell: ({ row }) => (
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleViewDetail(row.original);
+          }}
+        >
+          상세
+        </Button>
+      ),
+      enableSorting: false,
+    },
+  ], [handleViewDetail]);
+
+  // Deleted members columns (memoized)
+  const deletedColumns = useMemo<ColumnDef<MemberWithLatestMemo, unknown>[]>(() => [
+    {
+      accessorKey: 'memberNumber',
+      header: '번호',
+      cell: ({ row }) => (
+        <span className="text-gray-500">{row.original.memberNumber}</span>
+      ),
+    },
+    {
+      accessorKey: 'name',
+      header: '이름',
+      cell: ({ row }) => (
+        <span className="font-medium text-gray-900">{row.original.name}</span>
+      ),
+    },
+    {
+      accessorKey: 'phone',
+      header: '연락처',
+      cell: ({ row }) => (
+        <span className="text-gray-600">
+          {row.original.phone ? formatPhoneNumber(row.original.phone) : '-'}
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'email',
+      header: '이메일',
+      cell: ({ row }) => (
+        <span className="text-gray-600 truncate max-w-[150px] block">
+          {row.original.email || '-'}
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'deletedAt',
+      header: '삭제일시',
+      cell: ({ row }) => (
+        <span className="text-gray-500">
+          {row.original.deletedAt ? formatDate(row.original.deletedAt) : '-'}
+        </span>
+      ),
+    },
+    {
+      id: 'actions',
+      header: '',
+      cell: ({ row }) => (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleRestore(row.original);
+          }}
+          leftIcon={<RotateCcw className="w-3 h-3" />}
+        >
+          복원
+        </Button>
+      ),
+    },
+  ], []);
 
   const handleCreateNew = () => {
     setSelectedMember(null);
@@ -99,6 +286,106 @@ export function CustomersPage() {
     }
   };
 
+  const handleRestore = async (member: MemberWithLatestMemo) => {
+    if (!confirm(`${member.name} 고객을 복원하시겠습니까?`)) return;
+
+    try {
+      await apiClient.post(`/members/${member.id}/restore`);
+      loadDeletedMembers();
+    } catch (err) {
+      alert('복원 중 오류가 발생했습니다.');
+    }
+  };
+
+  // CSV Export handler
+  const handleExport = (selectedRows?: MemberWithLatestMemo[]) => {
+    const data = selectedRows?.length ? selectedRows : filteredMembers;
+    exportToCSV(data, {
+      filename: `고객목록_${new Date().toISOString().split('T')[0]}`,
+      headers: {
+        memberNumber: '회원번호',
+        name: '이름',
+        phone: '연락처',
+        email: '이메일',
+        grade: '등급',
+        remark: '비고',
+      },
+    });
+  };
+
+  // CSV Import handler
+  const handleImport = async (data: Record<string, string>[]) => {
+    if (!currentBusinessPlace?.id || !user?.providerId) {
+      alert('사업장 또는 사용자 정보가 없습니다.');
+      return;
+    }
+
+    // 이름 컬럼 필수 검증
+    const invalidRows = data.filter((row) => !row['이름']?.trim());
+    if (invalidRows.length > 0) {
+      alert(`이름이 없는 행이 ${invalidRows.length}개 있습니다. 모든 행에 이름을 입력해주세요.`);
+      return;
+    }
+
+    try {
+      // 각 행별로 등록
+      for (const row of data) {
+        await apiClient.post('/members', {
+          memberNumber: row['회원번호'] || '',
+          name: row['이름'],
+          phone: row['연락처'] || '',
+          email: row['이메일'] || '',
+          grade: row['등급'] || '',
+          remark: row['비고'] || '',
+          businessPlaceId: currentBusinessPlace.id,
+          ownerId: user.providerId,
+        });
+      }
+      alert(`${data.length}명의 고객이 등록되었습니다.`);
+      loadMembers();
+      setIsImportOpen(false);
+    } catch (err) {
+      alert('가져오기 중 오류가 발생했습니다.');
+      console.error('Import error:', err);
+    }
+  };
+
+  // Bulk Delete handler
+  const handleBulkDelete = async (selectedRows: MemberWithLatestMemo[]) => {
+    if (!confirm(`${selectedRows.length}명을 삭제하시겠습니까?`)) return;
+
+    try {
+      await Promise.all(
+        selectedRows.map((m) => apiClient.delete(`/members/${m.id}/soft`))
+      );
+      loadMembers();
+    } catch (err) {
+      alert('삭제 중 오류가 발생했습니다.');
+    }
+  };
+
+  // Render bulk actions
+  const renderBulkActions = (selectedRows: MemberWithLatestMemo[]) => (
+    <div className="flex gap-2">
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => handleExport(selectedRows)}
+        leftIcon={<Download className="w-3 h-3" />}
+      >
+        선택 내보내기 ({selectedRows.length})
+      </Button>
+      <Button
+        size="sm"
+        variant="destructive"
+        onClick={() => handleBulkDelete(selectedRows)}
+        leftIcon={<Trash2 className="w-3 h-3" />}
+      >
+        선택 삭제 ({selectedRows.length})
+      </Button>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -109,8 +396,40 @@ export function CustomersPage() {
             {currentBusinessPlace?.name || '사업장'}의 고객 목록
           </p>
         </div>
-        <Button onClick={handleCreateNew} leftIcon={<Plus className="w-4 h-4" />}>
-          고객 등록
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => handleExport()}
+            leftIcon={<Download className="w-4 h-4" />}
+          >
+            전체 내보내기
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setIsImportOpen(true)}
+            leftIcon={<Upload className="w-4 h-4" />}
+          >
+            CSV 가져오기
+          </Button>
+          <Button onClick={handleCreateNew} leftIcon={<Plus className="w-4 h-4" />}>
+            고객 등록
+          </Button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2">
+        <Button
+          variant={activeTab === 'active' ? 'primary' : 'outline'}
+          onClick={() => setActiveTab('active')}
+        >
+          활성 고객 ({members.length})
+        </Button>
+        <Button
+          variant={activeTab === 'deleted' ? 'primary' : 'outline'}
+          onClick={() => setActiveTab('deleted')}
+        >
+          삭제된 고객 ({deletedMembers.length})
         </Button>
       </div>
 
@@ -131,9 +450,9 @@ export function CustomersPage() {
         </CardContent>
       </Card>
 
-      {/* Members List */}
+      {/* Members List with DataTable */}
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <div className="w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin"></div>
@@ -141,10 +460,10 @@ export function CustomersPage() {
           ) : filteredMembers.length === 0 ? (
             <EmptyState
               icon={<User className="w-8 h-8" />}
-              title={searchQuery ? '검색 결과가 없습니다' : '등록된 고객이 없습니다'}
-              description={searchQuery ? '다른 검색어로 시도해보세요' : '새 고객을 등록해보세요'}
+              title={searchQuery ? '검색 결과가 없습니다' : activeTab === 'active' ? '등록된 고객이 없습니다' : '삭제된 고객이 없습니다'}
+              description={searchQuery ? '다른 검색어로 시도해보세요' : activeTab === 'active' ? '새 고객을 등록해보세요' : '삭제된 고객이 없습니다'}
               action={
-                !searchQuery && (
+                !searchQuery && activeTab === 'active' && (
                   <Button onClick={handleCreateNew} leftIcon={<Plus className="w-4 h-4" />}>
                     고객 등록
                   </Button>
@@ -152,60 +471,27 @@ export function CustomersPage() {
               }
               className="py-12"
             />
+          ) : activeTab === 'active' ? (
+            <DataTable
+              data={filteredMembers}
+              columns={columns}
+              enableRowSelection
+              renderBulkActions={renderBulkActions}
+              enableFiltering={false}
+              enablePagination
+              pageSize={20}
+              emptyMessage="등록된 고객이 없습니다"
+            />
           ) : (
-            <div className="divide-y divide-gray-100">
-              {/* Table Header */}
-              <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-gray-50 text-sm font-medium text-gray-500">
-                <div className="col-span-1">번호</div>
-                <div className="col-span-2">이름</div>
-                <div className="col-span-2">연락처</div>
-                <div className="col-span-2">이메일</div>
-                <div className="col-span-1">등급</div>
-                <div className="col-span-3">최근 메모</div>
-                <div className="col-span-1"></div>
-              </div>
-
-              {/* Table Body */}
-              {filteredMembers.map((member) => (
-                <div
-                  key={member.id}
-                  className="grid grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-gray-50 transition-colors cursor-pointer"
-                  onClick={() => handleViewDetail(member)}
-                >
-                  <div className="col-span-1 text-sm text-gray-500">
-                    {member.memberNumber}
-                  </div>
-                  <div className="col-span-2">
-                    <p className="font-medium text-gray-900">{member.name}</p>
-                  </div>
-                  <div className="col-span-2 text-sm text-gray-600">
-                    {member.phone ? formatPhoneNumber(member.phone) : '-'}
-                  </div>
-                  <div className="col-span-2 text-sm text-gray-600 truncate">
-                    {member.email || '-'}
-                  </div>
-                  <div className="col-span-1">
-                    {member.grade && (
-                      <Badge variant="info">{member.grade}</Badge>
-                    )}
-                  </div>
-                  <div className="col-span-3 text-sm text-gray-500 truncate">
-                    {member.latestMemo?.content || '-'}
-                  </div>
-                  <div className="col-span-1 text-right">
-                    <button
-                      className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleViewDetail(member);
-                      }}
-                    >
-                      <MoreHorizontal className="w-4 h-4 text-gray-400" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <DataTable
+              data={filteredMembers}
+              columns={deletedColumns}
+              enableRowSelection={false}
+              enableFiltering={false}
+              enablePagination
+              pageSize={20}
+              emptyMessage="삭제된 고객이 없습니다"
+            />
           )}
         </CardContent>
       </Card>
@@ -324,6 +610,28 @@ export function CustomersPage() {
           }}
           onCancel={() => setIsFormOpen(false)}
         />
+      </SlidePanel>
+
+      {/* CSV Import Panel */}
+      <SlidePanel
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        title="CSV 가져오기"
+        width="md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            CSV 파일을 업로드하여 고객을 일괄 등록할 수 있습니다.
+            <br />
+            필수 컬럼: <span className="font-medium">이름</span>
+            <br />
+            선택 컬럼: 회원번호, 연락처, 이메일, 등급, 비고
+          </p>
+          <CSVUploader
+            onUpload={handleImport}
+            expectedHeaders={['이름']}
+          />
+        </div>
       </SlidePanel>
     </div>
   );
