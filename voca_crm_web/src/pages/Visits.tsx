@@ -4,6 +4,8 @@ import {
   Search,
   User,
   X,
+  Plus,
+  UserPlus,
 } from 'lucide-react';
 import {
   Card,
@@ -13,17 +15,28 @@ import {
   Badge,
   Input,
   EmptyState,
+  Button,
+  SlidePanel,
 } from '@/components/ui';
 import { useAuthStore } from '@/stores/authStore';
 import { apiClient } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/utils';
-import type { Visit } from '@/types';
+import type { Visit, Member, CheckInRequest } from '@/types';
 
 export function VisitsPage() {
   const { currentBusinessPlace } = useAuthStore();
   const [visits, setVisits] = useState<Visit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // 체크인 관련 상태
+  const [isCheckInOpen, setIsCheckInOpen] = useState(false);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [selectedMemberId, setSelectedMemberId] = useState('');
+  const [checkInNote, setCheckInNote] = useState('');
+  const [memberSearchQuery, setMemberSearchQuery] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const loadVisits = useCallback(async () => {
     if (!currentBusinessPlace?.id) return;
@@ -49,6 +62,71 @@ export function VisitsPage() {
   useEffect(() => {
     loadVisits();
   }, [loadVisits]);
+
+  // 고객 목록 로드
+  const loadMembers = useCallback(async () => {
+    if (!currentBusinessPlace?.id) return;
+
+    setMembersLoading(true);
+    try {
+      const response = await apiClient.get<Member[]>(
+        `/members/by-business-place/${currentBusinessPlace.id}`
+      );
+      setMembers(response || []);
+    } catch (err) {
+      console.error('Failed to load members:', err);
+      setMembers([]);
+    } finally {
+      setMembersLoading(false);
+    }
+  }, [currentBusinessPlace?.id]);
+
+  // 체크인 패널 열기
+  const handleOpenCheckIn = () => {
+    setIsCheckInOpen(true);
+    setSelectedMemberId('');
+    setCheckInNote('');
+    setMemberSearchQuery('');
+    loadMembers();
+  };
+
+  // 체크인 처리
+  const handleCheckIn = async () => {
+    if (!selectedMemberId) {
+      alert('고객을 선택해주세요.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const request: CheckInRequest = {
+        memberId: selectedMemberId,
+      };
+      if (checkInNote.trim()) {
+        request.note = checkInNote.trim();
+      }
+
+      await apiClient.post('/visits/checkin', request);
+      setIsCheckInOpen(false);
+      loadVisits();
+    } catch (err) {
+      console.error('Check-in failed:', err);
+      alert('체크인 처리 중 오류가 발생했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // 고객 목록 필터링
+  const filteredMembers = members.filter((member) => {
+    if (!memberSearchQuery) return true;
+    const query = memberSearchQuery.toLowerCase();
+    return (
+      member.name.toLowerCase().includes(query) ||
+      member.phone?.toLowerCase().includes(query) ||
+      member.memberNumber?.toLowerCase().includes(query)
+    );
+  });
 
   const handleCancelVisit = async (visit: Visit) => {
     if (!confirm(`${visit.memberName || '고객'}님의 방문 기록을 취소하시겠습니까?`)) return;
@@ -83,6 +161,9 @@ export function VisitsPage() {
           <h1 className="text-2xl font-bold text-gray-900">방문 관리</h1>
           <p className="text-gray-500 mt-1">오늘의 방문(체크인) 기록</p>
         </div>
+        <Button leftIcon={<UserPlus className="w-4 h-4" />} onClick={handleOpenCheckIn}>
+          체크인
+        </Button>
       </div>
 
       {/* Search */}
@@ -209,6 +290,111 @@ export function VisitsPage() {
           </Card>
         </div>
       )}
+
+      {/* Check-In SlidePanel */}
+      <SlidePanel
+        isOpen={isCheckInOpen}
+        onClose={() => setIsCheckInOpen(false)}
+        title="체크인"
+        width="md"
+      >
+        <div className="space-y-6">
+          {/* 고객 검색 */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              고객 검색
+            </label>
+            <Input
+              placeholder="이름, 전화번호, 회원번호로 검색..."
+              leftIcon={<Search className="w-4 h-4" />}
+              value={memberSearchQuery}
+              onChange={(e) => setMemberSearchQuery(e.target.value)}
+            />
+          </div>
+
+          {/* 고객 목록 */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              고객 선택 <span className="text-red-500">*</span>
+            </label>
+            <div className="border border-gray-200 rounded-lg max-h-64 overflow-y-auto">
+              {membersLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="w-6 h-6 border-2 border-primary-200 border-t-primary-600 rounded-full animate-spin"></div>
+                </div>
+              ) : filteredMembers.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  {memberSearchQuery ? '검색 결과가 없습니다' : '고객이 없습니다'}
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {filteredMembers.map((member) => (
+                    <button
+                      key={member.id}
+                      type="button"
+                      className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors ${
+                        selectedMemberId === member.id ? 'bg-primary-50 border-l-4 border-primary-500' : ''
+                      }`}
+                      onClick={() => setSelectedMemberId(member.id)}
+                    >
+                      <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <User className="w-4 h-4 text-gray-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 truncate">
+                          {member.name}
+                        </p>
+                        <p className="text-sm text-gray-500 truncate">
+                          {member.phone || member.memberNumber || ''}
+                        </p>
+                      </div>
+                      {selectedMemberId === member.id && (
+                        <div className="w-5 h-5 bg-primary-500 rounded-full flex items-center justify-center">
+                          <Plus className="w-3 h-3 text-white rotate-45" />
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 메모 입력 */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              메모 (선택)
+            </label>
+            <textarea
+              className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+              rows={3}
+              placeholder="방문 관련 메모를 입력하세요..."
+              value={checkInNote}
+              onChange={(e) => setCheckInNote(e.target.value)}
+            />
+          </div>
+
+          {/* 액션 버튼 */}
+          <div className="flex gap-3 pt-4 border-t border-gray-200">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setIsCheckInOpen(false)}
+            >
+              취소
+            </Button>
+            <Button
+              variant="primary"
+              className="flex-1"
+              leftIcon={<UserPlus className="w-4 h-4" />}
+              onClick={handleCheckIn}
+              disabled={!selectedMemberId || isSubmitting}
+            >
+              {isSubmitting ? '처리 중...' : '체크인'}
+            </Button>
+          </div>
+        </div>
+      </SlidePanel>
     </div>
   );
 }

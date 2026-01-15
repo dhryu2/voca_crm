@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Calendar,
   Clock,
@@ -8,6 +8,8 @@ import {
   User,
   Check,
   X,
+  ChevronDown,
+  UserX,
 } from 'lucide-react';
 import {
   Card,
@@ -32,6 +34,17 @@ const STATUS_CONFIG: Record<ReservationStatus, { label: string; variant: 'defaul
   NO_SHOW: { label: '노쇼', variant: 'error' },
 };
 
+type StatusFilter = 'ALL' | ReservationStatus;
+
+const STATUS_FILTER_TABS: { key: StatusFilter; label: string }[] = [
+  { key: 'ALL', label: '전체' },
+  { key: 'PENDING', label: '대기' },
+  { key: 'CONFIRMED', label: '확정' },
+  { key: 'COMPLETED', label: '완료' },
+  { key: 'CANCELLED', label: '취소' },
+  { key: 'NO_SHOW', label: '노쇼' },
+];
+
 export function ReservationsPage() {
   const { currentBusinessPlace } = useAuthStore();
   const [reservations, setReservations] = useState<Reservation[]>([]);
@@ -39,6 +52,9 @@ export function ReservationsPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const loadReservations = useCallback(async () => {
     if (!currentBusinessPlace?.id) return;
@@ -65,6 +81,37 @@ export function ReservationsPage() {
   useEffect(() => {
     loadReservations();
   }, [loadReservations]);
+
+  // 드롭다운 외부 클릭 시 닫기
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpenDropdownId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // 상태 필터 적용된 예약 목록
+  const filteredReservations = reservations.filter((reservation) => {
+    if (statusFilter === 'ALL') return true;
+    return reservation.status === statusFilter;
+  });
+
+  // 날짜 입력 형식 변환 (YYYY-MM-DD)
+  const formatDateForInput = (date: Date) => {
+    return date.toISOString().split('T')[0];
+  };
+
+  // 날짜 입력 핸들러
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newDate = new Date(e.target.value);
+    if (!isNaN(newDate.getTime())) {
+      setSelectedDate(newDate);
+    }
+  };
 
   const handlePrevDay = () => {
     setSelectedDate((prev) => {
@@ -93,9 +140,29 @@ export function ReservationsPage() {
       });
       loadReservations();
       setIsDetailOpen(false);
+      setOpenDropdownId(null);
     } catch (err) {
       alert('상태 변경 중 오류가 발생했습니다.');
     }
+  };
+
+  // 인라인 상태 변경 (드롭다운)
+  const handleInlineStatusChange = async (reservationId: string, newStatus: ReservationStatus) => {
+    try {
+      await apiClient.patch(`/reservations/${reservationId}/status`, {
+        status: newStatus,
+      });
+      loadReservations();
+      setOpenDropdownId(null);
+    } catch (err) {
+      alert('상태 변경 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 드롭다운 토글
+  const toggleDropdown = (e: React.MouseEvent, reservationId: string) => {
+    e.stopPropagation();
+    setOpenDropdownId(openDropdownId === reservationId ? null : reservationId);
   };
 
   const formatDateHeader = (date: Date) => {
@@ -123,9 +190,10 @@ export function ReservationsPage() {
         </Button>
       </div>
 
-      {/* Date Selector */}
+      {/* Date Selector & Status Filter */}
       <Card>
-        <CardContent className="p-4">
+        <CardContent className="p-4 space-y-4">
+          {/* Date Navigation */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={handlePrevDay}>
@@ -141,11 +209,41 @@ export function ReservationsPage() {
                 <Badge variant="info">오늘</Badge>
               )}
             </div>
-            {!isToday && (
-              <Button variant="ghost" size="sm" onClick={handleToday}>
-                오늘로 이동
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={formatDateForInput(selectedDate)}
+                onChange={handleDateChange}
+                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+              {!isToday && (
+                <Button variant="ghost" size="sm" onClick={handleToday}>
+                  오늘로 이동
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Status Filter Tabs */}
+          <div className="flex items-center gap-1 border-b border-gray-200 overflow-x-auto">
+            {STATUS_FILTER_TABS.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setStatusFilter(tab.key)}
+                className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
+                  statusFilter === tab.key
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                {tab.label}
+                {tab.key !== 'ALL' && (
+                  <span className="ml-1.5 text-xs text-gray-400">
+                    ({reservations.filter(r => r.status === tab.key).length})
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -156,7 +254,10 @@ export function ReservationsPage() {
           <CardTitle className="flex items-center gap-2">
             <Calendar className="w-5 h-5 text-gray-500" />
             예약 목록
-            <Badge variant="default" className="ml-2">{reservations.length}건</Badge>
+            <Badge variant="default" className="ml-2">
+              {filteredReservations.length}건
+              {statusFilter !== 'ALL' && ` / 전체 ${reservations.length}건`}
+            </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -164,17 +265,22 @@ export function ReservationsPage() {
             <div className="flex items-center justify-center py-12">
               <div className="w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin"></div>
             </div>
-          ) : reservations.length === 0 ? (
+          ) : filteredReservations.length === 0 ? (
             <EmptyState
               icon={<Calendar className="w-8 h-8" />}
               title="예약이 없습니다"
-              description={`${formatDateHeader(selectedDate)}에 등록된 예약이 없습니다`}
+              description={
+                statusFilter !== 'ALL'
+                  ? `${formatDateHeader(selectedDate)}에 '${STATUS_CONFIG[statusFilter as ReservationStatus]?.label || ''}' 상태의 예약이 없습니다`
+                  : `${formatDateHeader(selectedDate)}에 등록된 예약이 없습니다`
+              }
               className="py-12"
             />
           ) : (
-            <div className="divide-y divide-gray-100">
-              {reservations.map((reservation) => {
+            <div className="divide-y divide-gray-100" ref={dropdownRef}>
+              {filteredReservations.map((reservation) => {
                 const statusConfig = STATUS_CONFIG[reservation.status];
+                const isDropdownOpen = openDropdownId === reservation.id;
                 return (
                   <div
                     key={reservation.id}
@@ -210,10 +316,77 @@ export function ReservationsPage() {
                       )}
                     </div>
 
-                    {/* Status */}
-                    <Badge variant={statusConfig.variant}>
-                      {statusConfig.label}
-                    </Badge>
+                    {/* Status with Dropdown */}
+                    <div className="relative">
+                      <button
+                        onClick={(e) => toggleDropdown(e, reservation.id)}
+                        className="flex items-center gap-1 group"
+                      >
+                        <Badge variant={statusConfig.variant} className="pr-1">
+                          {statusConfig.label}
+                          <ChevronDown className={`w-3 h-3 ml-1 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                        </Badge>
+                      </button>
+
+                      {/* Status Dropdown Menu */}
+                      {isDropdownOpen && (
+                        <div className="absolute right-0 top-full mt-1 w-32 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
+                          {reservation.status === 'PENDING' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleInlineStatusChange(reservation.id, 'CONFIRMED');
+                              }}
+                              className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                            >
+                              <Check className="w-4 h-4 text-green-500" />
+                              확정
+                            </button>
+                          )}
+                          {reservation.status === 'CONFIRMED' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleInlineStatusChange(reservation.id, 'COMPLETED');
+                              }}
+                              className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                            >
+                              <Check className="w-4 h-4 text-blue-500" />
+                              완료
+                            </button>
+                          )}
+                          {(reservation.status === 'PENDING' || reservation.status === 'CONFIRMED') && (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleInlineStatusChange(reservation.id, 'CANCELLED');
+                                }}
+                                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                              >
+                                <X className="w-4 h-4 text-red-500" />
+                                취소
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleInlineStatusChange(reservation.id, 'NO_SHOW');
+                                }}
+                                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                              >
+                                <UserX className="w-4 h-4 text-gray-500" />
+                                노쇼
+                              </button>
+                            </>
+                          )}
+                          {(reservation.status === 'CANCELLED' || reservation.status === 'COMPLETED' || reservation.status === 'NO_SHOW') && (
+                            <div className="px-3 py-2 text-sm text-gray-400">
+                              변경 불가
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })}
