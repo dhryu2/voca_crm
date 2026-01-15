@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -19,6 +19,9 @@ export function SlidePanel({
   children,
   width = 'md',
 }: SlidePanelProps) {
+  const [shouldRender, setShouldRender] = useState(isOpen);
+  const [isAnimating, setIsAnimating] = useState(false);
+
   const widths = {
     sm: 'max-w-sm',
     md: 'max-w-md',
@@ -26,12 +29,35 @@ export function SlidePanel({
     xl: 'max-w-xl',
   };
 
-  // ESC 키로 닫기
+  // 진입/퇴장 애니메이션 관리
   useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
+    if (isOpen) {
+      setShouldRender(true);
+      // 다음 프레임에 애니메이션 시작 (DOM 렌더링 후)
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setIsAnimating(true);
+        });
+      });
+    } else if (shouldRender) {
+      setIsAnimating(false);
+      // 애니메이션 완료 후 DOM 제거 (300ms 트랜지션)
+      const timer = setTimeout(() => {
+        setShouldRender(false);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, shouldRender]);
 
+  // ESC 키로 닫기
+  const handleEscape = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    },
+    [onClose]
+  );
+
+  useEffect(() => {
     if (isOpen) {
       document.addEventListener('keydown', handleEscape);
       document.body.style.overflow = 'hidden';
@@ -41,23 +67,27 @@ export function SlidePanel({
       document.removeEventListener('keydown', handleEscape);
       document.body.style.overflow = 'unset';
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, handleEscape]);
 
-  if (!isOpen) return null;
+  if (!shouldRender) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
-      {/* Backdrop */}
+      {/* Backdrop with fade transition */}
       <div
-        className="absolute inset-0 bg-black/50 transition-opacity"
+        className={cn(
+          'absolute inset-0 bg-black transition-opacity duration-300',
+          isAnimating ? 'opacity-50' : 'opacity-0'
+        )}
         onClick={onClose}
       />
 
-      {/* Panel */}
+      {/* Panel with slide transition */}
       <div
         className={cn(
-          'relative w-full bg-white shadow-xl flex flex-col h-full animate-slide-in-right',
-          widths[width]
+          'relative w-full bg-white shadow-xl flex flex-col h-full transition-transform duration-300 ease-out',
+          widths[width],
+          isAnimating ? 'translate-x-0' : 'translate-x-full'
         )}
       >
         {/* Header */}
