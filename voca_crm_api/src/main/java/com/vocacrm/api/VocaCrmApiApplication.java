@@ -3,6 +3,7 @@ package com.vocacrm.api;
 import io.github.cdimascio.dotenv.Dotenv;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
@@ -17,12 +18,14 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * - @ComponentScan: 현재 패키지 및 하위 패키지의 컴포넌트 스캔
  *
  * @EnableScheduling: 스케줄링 기능 활성화 (예약 데이터 자동 정리 등)
+ * @EnableAsync: 비동기 처리 활성화 (감사 로깅, 에러 로깅)
  *
  * @author VocaCRM Team
  * @version 1.0
  */
 @SpringBootApplication
 @EnableScheduling
+@EnableAsync
 public class VocaCrmApiApplication {
 
 	/**
