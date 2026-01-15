@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { Button, Input } from '@/components/ui';
 import { Mic, ArrowLeft, User, Phone, Mail } from 'lucide-react';
-import type { OAuthProvider } from '@/lib/oauth';
+import { OAuthError, type OAuthProvider } from '@/lib/oauth';
 
 export function SignupPage() {
   const navigate = useNavigate();
@@ -12,6 +12,7 @@ export function SignupPage() {
   const [step, setStep] = useState<'social' | 'info'>('social');
   const [selectedProvider, setSelectedProvider] = useState<OAuthProvider | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadingProvider, setLoadingProvider] = useState<OAuthProvider | null>(null);
 
   const [formData, setFormData] = useState({
     username: '',
@@ -55,6 +56,8 @@ export function SignupPage() {
       return;
     }
 
+    setLoadingProvider(selectedProvider);
+
     try {
       await signupWithProvider(selectedProvider, {
         username: formData.username,
@@ -65,7 +68,20 @@ export function SignupPage() {
       const redirectTo = locationState?.from || '/dashboard';
       navigate(redirectTo, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : '회원가입에 실패했습니다.');
+      if (err instanceof Error) {
+        // OAuthError인 경우 코드별 처리
+        if (err instanceof OAuthError) {
+          if (err.code === 'CANCELLED') {
+            // 취소는 에러 메시지 표시하지 않음
+            return;
+          }
+        }
+        setError(err.message);
+      } else {
+        setError('회원가입에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      }
+    } finally {
+      setLoadingProvider(null);
     }
   };
 
@@ -259,9 +275,10 @@ export function SignupPage() {
                 <Button
                   type="submit"
                   className="w-full h-12 mt-6"
-                  isLoading={isLoading}
+                  isLoading={isLoading || loadingProvider !== null}
+                  disabled={isLoading || loadingProvider !== null}
                 >
-                  {getProviderName(selectedProvider)}로 가입 완료
+                  {loadingProvider ? '가입 진행 중...' : `${getProviderName(selectedProvider)}로 가입 완료`}
                 </Button>
 
                 <Button
@@ -271,7 +288,9 @@ export function SignupPage() {
                   onClick={() => {
                     setStep('social');
                     setSelectedProvider(null);
+                    setError(null);
                   }}
+                  disabled={loadingProvider !== null}
                 >
                   다른 방법으로 가입
                 </Button>
