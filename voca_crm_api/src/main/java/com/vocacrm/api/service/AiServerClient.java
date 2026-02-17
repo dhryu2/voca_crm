@@ -29,7 +29,6 @@ public class AiServerClient {
 
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
-    private final DeepLTranslationService translationService;
     private final DailyAiUsageLimiter dailyAiUsageLimiter;
 
     @Value("${ai.server.url}")
@@ -60,9 +59,7 @@ public class AiServerClient {
             return createDailyLimitExceededResult();
         }
 
-        // DeepL API를 사용하여 한국어 텍스트를 영어로 번역
-        String translatedText = translationService.translateToEnglish(text);
-        log.debug("Original text: '{}', Translated text: '{}'", text, translatedText);
+        log.debug("Voice command text: '{}'", text);
 
         // 상세 옵션 설정 (무작위성 제거)
         Map<String, Object> options = new HashMap<>();
@@ -70,7 +67,7 @@ public class AiServerClient {
         options.put("num_predict", 128);
 
         // 모델이 인식하기 좋게 프롬프트 가공 (Prefix/Suffix 추가)
-        String optimizedPrompt = String.format("Input: \"%s\"\nOutput:", translatedText);
+        String optimizedPrompt = String.format("Input: \"%s\"\nOutput:", text);
 
         // 요청 객체 빌드
         AiAnalysisRequest request = AiAnalysisRequest.builder()

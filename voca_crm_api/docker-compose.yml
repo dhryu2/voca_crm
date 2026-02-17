@@ -1,51 +1,56 @@
 # ============================================
 # Docker Compose 설정 파일
 # ============================================
+# VocaCRM API 서버를 Docker 컨테이너로 실행
+# PostgreSQL은 외부 서버 사용 (컨테이너 아님)
 
-# ============================================
-# 서비스 정의
-# ============================================
+# 최신 docker compose는 version 필요없다.
+#version: '3.8'
+
 services:
-  # ============================================
   # Spring Boot API 서비스
-  # ============================================
   api:
-    # ===== Docker 이미지 설정 =====
-    # 사용할 Docker 이미지 (GitHub Container Registry 또는 로컬 빌드)
-    # .env 파일에서 DOCKER_IMAGE 값을 설정
-    image: ${DOCKER_IMAGE:-ghcr.io/dhryu2/voca-crm-api:latest}
+    # Docker 이미지 (.env 파일의 DOCKER_IMAGE 사용)
+    image: ${DOCKER_IMAGE}
 
-    # 컨테이너 이름을 voca_crm_api로 지정
+    # 컨테이너 이름
     container_name: voca_crm_api
 
-    # ===== 재시작 정책 =====
-    # 서버 재부팅 시에도 자동으로 시작됨
+    # 호스트 네트워크 사용 (localhost로 PostgreSQL 접근 가능)
+    network_mode: host
+
+    # 재시작 정책
     restart: unless-stopped
 
-    # ===== 환경 변수 설정 =====
+    # 환경 변수 (.env 파일에서 자동 로드)
     environment:
-      # ----- 애플리케이션 기본 설정 -----
-      APP_NAME: ${APP_NAME}                    # 애플리케이션 이름
-      SERVER_PORT: ${SERVER_PORT}              # API 서버 포트 (기본: 8080)
+      # 애플리케이션 설정
+      APP_NAME: ${APP_NAME}
+      SERVER_PORT: ${SERVER_PORT}
 
-      # ----- 데이터베이스 연결 설정 (외부 DB 서버) -----
-      DB_HOST: ${DB_HOST}                      # PostgreSQL 서버 주소
-      DB_PORT: ${DB_PORT}                      # PostgreSQL 포트
-      DB_NAME: ${DB_NAME}                      # 데이터베이스 이름
-      DB_USERNAME: ${DB_USERNAME}              # DB 사용자명
-      DB_PASSWORD: ${DB_PASSWORD}              # DB 비밀번호
+      # 데이터베이스 연결 (호스트의 localhost)
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
 
-      # ----- JWT 인증 설정 -----
-      JWT_SECRET: ${JWT_SECRET}                # JWT 토큰 서명용 시크릿 키 (필수 .env에 설정)
+      # Redis
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
 
-      # ----- Spring Boot 프로파일 -----
-      # prod: 프로덕션 환경
-      # dev: 개발 환경
-      # test: 테스트 환경
+      # JWT
+      JWT_SECRET: ${JWT_SECRET}
+
+      # AI Server (Ollama)
+      AI_SERVER_URL: ${AI_SERVER_URL}
+      AI_MODEL_NAME: ${AI_MODEL_NAME}
+
+      # Spring Boot 프로파일
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
 
-      # ----- JVM 메모리 및 성능 옵션 -----
-      # Spring Boot 컨테이너가 사용할 Java 가상 머신 옵션
+      # JVM 옵션
       JAVA_OPTS: >-
         -Xms512m
         -Xmx1024m
@@ -54,33 +59,18 @@ services:
         -Dfile.encoding=UTF-8
         -Duser.timezone=Asia/Seoul
 
-    # ===== 포트 매핑 =====
-    ports:
-      - "${SERVER_PORT}:${SERVER_PORT}"
-
-    # ===== 볼륨 마운트 (데이터 영구 저장) =====
-    # 컨테이너가 삭제되어도 로그 파일은 유지됨
-    # api_logs라는 이름의 볼륨을 컨테이너의 /app/logs 경로에 연결
+    # 볼륨 (로그 파일 영구 저장)
     volumes:
       - api_logs:/app/logs
 
-    # ===== 헬스체크 설정 =====
+    # 헬스체크
     healthcheck:
-      # Spring Actuator의 health 엔드포인트를 호출하여 상태 확인
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${SERVER_PORT}/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
-      interval: 30s       # 30초마다 헬스체크 실행
-      timeout: 10s        # 10초 내 응답 없으면 실패로 간주
-      retries: 3          # 3번 연속 실패 시 unhealthy 상태로 표시
-      start_period: 60s   # 컨테이너 시작 후 60초간은 실패해도 무시 (초기화 시간)
-
-# ============================================
-# 볼륨 정의 (데이터 영구 저장)
-# ============================================
-# 컨테이너가 삭제되어도 이 볼륨의 데이터는 유지됩니다
 volumes:
-  # API 서버의 로그 파일을 저장하는 볼륨
-  # 위치: Docker가 관리하는 볼륨 저장소 (보통 /var/lib/docker/volumes/)
-  # 로그 확인: docker volume inspect api_logs
   api_logs:
-    driver: local     # 로컬 디스크에 저장
+    driver: local

@@ -3,11 +3,13 @@ package com.vocacrm.api.service;
 import com.vocacrm.api.dto.*;
 import com.vocacrm.api.model.Member;
 import com.vocacrm.api.model.Memo;
+import com.vocacrm.api.model.Visit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -24,6 +26,7 @@ public class VoiceCommandService {
     private final AiServerClient aiServerClient;
     private final MemberService memberService;
     private final MemoService memoService;
+    private final VisitService visitService;
     private final ReservationService reservationService;
     private final com.vocacrm.api.repository.UserRepository userRepository;
 
@@ -163,9 +166,41 @@ public class VoiceCommandService {
         }
 
         Member member = members.get(0);
-        return createCompletedResponse(
-                member.getName() + " 회원님을 찾았습니다.",
-                Map.of("member", member));
+
+        // 회원 상세 정보 메시지 구성
+        StringBuilder msg = new StringBuilder();
+        msg.append(member.getName()).append(" 회원님 정보입니다. ");
+        if (member.getMemberNumber() != null) {
+            msg.append("회원번호 ").append(member.getMemberNumber()).append(", ");
+        }
+        if (member.getPhone() != null && !member.getPhone().isEmpty()) {
+            msg.append("전화번호 ").append(member.getPhone()).append(", ");
+        }
+        if (member.getEmail() != null && !member.getEmail().isEmpty()) {
+            msg.append("이메일 ").append(member.getEmail()).append(", ");
+        }
+        if (member.getGrade() != null && !member.getGrade().isEmpty()) {
+            msg.append("등급 ").append(member.getGrade());
+        }
+
+        // 최신 메모 조회
+        Memo latestMemo = null;
+        try {
+            latestMemo = memoService.getLatestMemoByMemberId(member.getId().toString(), member.getBusinessPlaceId());
+            if (latestMemo != null) {
+                msg.append(". 최신 메모: ").append(latestMemo.getContent());
+            }
+        } catch (Exception e) {
+            // 메모가 없는 경우 무시
+        }
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("member", member);
+        if (latestMemo != null) {
+            data.put("memo", latestMemo);
+        }
+
+        return createCompletedResponse(msg.toString().replaceAll(",\\s*$", ""), data);
     }
 
     private VoiceCommandResponse handleMemberCreate(AiAnalysisResult aiResult, ConversationContextDTO context) {
@@ -359,13 +394,19 @@ public class VoiceCommandService {
         }
 
         Member member = members.get(0);
+        Map<String, Object> data = new HashMap<>();
+        data.put("member", member);
+
         try {
             Memo memo = memoService.getLatestMemoByMemberId(member.getId().toString(), member.getBusinessPlaceId());
-            return createCompletedResponse(
-                    member.getName() + " 회원의 최신 메모: " + memo.getContent(),
-                    Map.of("member", member, "memo", memo));
+            if (memo != null) {
+                data.put("memo", memo);
+                return createCompletedResponse(memo.getContent(), data);
+            } else {
+                return createCompletedResponse(member.getName() + " 회원의 메모가 없습니다.", data);
+            }
         } catch (Exception e) {
-            return createCompletedResponse(member.getName() + " 회원의 메모가 없습니다.", Map.of("member", member));
+            return createCompletedResponse(member.getName() + " 회원의 메모가 없습니다.", data);
         }
     }
 
@@ -383,11 +424,10 @@ public class VoiceCommandService {
 
         String content = aiResult.getContent();
         if (content == null || content.trim().isEmpty()) {
-            return createErrorResponse("메모 내용이 필요합니다.", "MISSING_PARAMETER");
+            return createContentInputResponse(members.get(0), aiResult, context, "어떤 내용의 메모를 남길까요?");
         }
 
         Member member = members.get(0);
-        // 작성자 ID 설정하여 메모 생성
         Memo memo = memoService.createMemo(member.getId().toString(), content, context.getRequestUserId());
 
         return createCompletedResponse(
@@ -556,23 +596,29 @@ public class VoiceCommandService {
         }
 
         Member member = members.get(0);
-        LocalDateTime now = LocalDateTime.now();
-
-        // 방문 메모 생성
         String note = aiResult.getNote();
-        String visitMessage = String.format("%d월 %d일 %d시 %d분 방문",
-                now.getMonthValue(), now.getDayOfMonth(), now.getHour(), now.getMinute());
 
-        if (note != null && !note.trim().isEmpty()) {
-            visitMessage += " - " + note;
+        try {
+            Visit visit = visitService.checkInWithUserCheck(
+                    member.getId().toString(), context.getRequestUserId(), note);
+
+            LocalDateTime kstTime = visit.getVisitedAt().atZone(ZoneId.of("UTC"))
+                    .withZoneSameInstant(ZoneId.of("Asia/Seoul")).toLocalDateTime();
+            String timeStr = String.format("%d월 %d일 %d시 %d분",
+                    kstTime.getMonthValue(), kstTime.getDayOfMonth(),
+                    kstTime.getHour(), kstTime.getMinute());
+
+            Map<String, Object> data = new HashMap<>();
+            data.put("member", member);
+            data.put("visit", visit);
+
+            return createCompletedResponse(
+                    member.getName() + " 회원님 " + timeStr + " 방문 체크인 완료되었습니다.", data);
+        } catch (Exception e) {
+            log.error("Visit checkin failed: {}", e.getMessage(), e);
+            return createErrorResponse(
+                    member.getName() + " 회원 체크인 처리 중 오류: " + e.getMessage(), "CHECKIN_ERROR");
         }
-
-        // 작성자 ID 설정하여 방문 메모 생성
-        Memo memo = memoService.createMemo(member.getId().toString(), visitMessage, context.getRequestUserId());
-
-        return createCompletedResponse(
-                member.getName() + " 회원님 방문이 체크되었습니다.",
-                Map.of("member", member, "memo", memo, "checkinTime", now.toString()));
     }
 
     private VoiceCommandResponse handleVisitGetByMember(AiAnalysisResult aiResult, ConversationContextDTO context) {
@@ -589,18 +635,26 @@ public class VoiceCommandService {
 
         Member member = members.get(0);
 
-        // 방문 기록 메모 필터링
-        List<Memo> visitMemos = memoService.getMemosByMemberId(member.getId().toString(), member.getBusinessPlaceId()).stream()
-                .filter(memo -> memo.getContent().contains("방문"))
-                .collect(Collectors.toList());
+        try {
+            List<Visit> visits = visitService.getVisitsByMemberId(
+                    member.getId().toString(), member.getBusinessPlaceId());
 
-        if (visitMemos.isEmpty()) {
-            return createCompletedResponse(member.getName() + " 회원의 방문 기록이 없습니다.", Map.of("member", member));
+            if (visits.isEmpty()) {
+                return createCompletedResponse(
+                        member.getName() + " 회원의 방문 기록이 없습니다.", Map.of("member", member));
+            }
+
+            Map<String, Object> data = new HashMap<>();
+            data.put("member", member);
+            data.put("visits", visits);
+
+            return createCompletedResponse(
+                    String.format("%s 회원의 방문 기록 %d건을 찾았습니다.", member.getName(), visits.size()), data);
+        } catch (Exception e) {
+            log.error("Visit lookup failed: {}", e.getMessage(), e);
+            return createCompletedResponse(
+                    member.getName() + " 회원의 방문 기록 조회 중 오류가 발생했습니다.", Map.of("member", member));
         }
-
-        return createCompletedResponse(
-                String.format("%s 회원의 방문 기록 %d건을 찾았습니다.", member.getName(), visitMemos.size()),
-                Map.of("member", member, "visits", visitMemos));
     }
 
     // ===== STATISTICS 카테고리 처리 =====
@@ -699,6 +753,7 @@ public class VoiceCommandService {
         return switch (currentStep.getStepType()) {
             case "member_selection" -> handleMemberSelection(request, context);
             case "memo_selection" -> handleMemoSelection(request, context);
+            case "content_input" -> handleContentInput(request, context);
             case "confirmation" -> handleConfirmation(request, context);
             default -> createErrorResponse("알 수 없는 대화 단계입니다.", "UNKNOWN_STEP");
         };
@@ -757,6 +812,32 @@ public class VoiceCommandService {
         context.addSelectedEntity(selectedMemo);
 
         Map<String, Object> originalIntent = context.getOriginalIntent();
+        return executeWithOriginalIntent(originalIntent, context);
+    }
+
+    private VoiceCommandResponse handleContentInput(VoiceCommandRequest request, ConversationContextDTO context) {
+        String inputText = request.getText();
+        if (inputText == null || inputText.trim().isEmpty()) {
+            return VoiceCommandResponse.builder()
+                    .status("clarification_needed")
+                    .message("내용을 말씀해주세요.")
+                    .context(context)
+                    .build();
+        }
+
+        Map<String, Object> originalIntent = context.getOriginalIntent();
+        if (originalIntent == null) {
+            return createErrorResponse("원래 명령 정보를 찾을 수 없습니다.", "MISSING_INTENT");
+        }
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> parameters = (Map<String, Object>) originalIntent.get("parameters");
+        if (parameters == null) {
+            parameters = new HashMap<>();
+            originalIntent.put("parameters", parameters);
+        }
+        parameters.put("content", inputText.trim());
+
         return executeWithOriginalIntent(originalIntent, context);
     }
 
@@ -940,6 +1021,42 @@ public class VoiceCommandService {
         }
 
         return String.join(" ", keywords);
+    }
+
+    private VoiceCommandResponse createContentInputResponse(Member member, AiAnalysisResult aiResult, ConversationContextDTO existingContext, String promptMessage) {
+        String conversationId = UUID.randomUUID().toString();
+
+        Map<String, Object> originalIntent = new HashMap<>();
+        originalIntent.put("category", aiResult.getCategory());
+        originalIntent.put("action", aiResult.getAction());
+        originalIntent.put("parameters", aiResult.getParameters() != null ? aiResult.getParameters() : new HashMap<>());
+
+        ConversationStep step = ConversationStep.builder()
+                .stepType("content_input")
+                .stepNumber(1)
+                .targetEntityType("content")
+                .build();
+
+        Map<String, Object> additionalData = new HashMap<>();
+        additionalData.put("memberId", member.getId().toString());
+        additionalData.put("memberName", member.getName());
+
+        ConversationContextDTO context = ConversationContextDTO.builder()
+                .conversationId(conversationId)
+                .businessPlaceId(existingContext != null ? existingContext.getBusinessPlaceId() : null)
+                .requestUserId(existingContext != null ? existingContext.getRequestUserId() : null)
+                .originalIntent(originalIntent)
+                .currentStep(step)
+                .additionalData(additionalData)
+                .selectedEntities(existingContext != null ? existingContext.getSelectedEntities() : new ArrayList<>())
+                .build();
+
+        return VoiceCommandResponse.builder()
+                .status("clarification_needed")
+                .conversationId(conversationId)
+                .message(member.getName() + " 회원님에게 " + promptMessage)
+                .context(context)
+                .build();
     }
 
     private VoiceCommandResponse createConfirmationResponse(Member member, String action, ConversationContextDTO existingContext) {

@@ -1,0 +1,76 @@
+# Test configuration - overrides main application.yaml during tests
+
+spring:
+  # Datasource configured by Testcontainers @ServiceConnection
+  # or by test-specific configuration
+
+  # Disable Flyway - use JPA ddl-auto for test schema
+  flyway:
+    enabled: false
+
+  # JPA configuration for tests
+  jpa:
+    hibernate:
+      ddl-auto: create-drop  # Create schema from entities, drop after test
+    show-sql: true  # Log SQL for debugging test failures
+    properties:
+      hibernate:
+        format_sql: true
+
+  # Disable Redis for tests (not needed for API testing)
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+      repositories:
+        enabled: false
+  session:
+    store-type: none  # Disable session management in tests
+
+# Disable OpenAPI/Swagger in tests
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+# Logging configuration
+logging:
+  level:
+    com.vocacrm.api: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.testcontainers: INFO
+
+# Disable JWT secret requirement in tests
+jwt:
+  secret: test-secret-key-for-testing-only-not-for-production-use-minimum-256-bits
+  access-token-validity: 3600000
+  refresh-token-validity: 1209600000
+  refresh-token-inactivity-expiry: 1209600
+  refresh-token-absolute-expiry: 7776000
+  max-refresh-tokens-per-user: 2
+
+# Disable AI server in tests
+ai:
+  server:
+    url: http://localhost:11434
+    model: voca-crm
+    timeout: 30000
+  daily-limit:
+    enabled: false
+    max-requests: 500
+
+# Disable DeepL in tests
+deepl:
+  api-key: test-key
+  api-url: https://api-free.deepl.com/v2/translate
+  timeout: 10000
+
+# Disable rate limiting in tests
+rate-limit:
+  enabled: false
+
+# Test admin
+app:
+  system-admin-ids: admin
