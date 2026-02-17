@@ -1,3 +1,5 @@
+import 'package:voca_crm/core/utils/date_parser.dart';
+
 /// 오류 로그 엔티티
 class ErrorLog {
   final String id;
@@ -72,11 +74,9 @@ class ErrorLog {
       platform: json['platform'] as String?,
       resolved: json['resolved'] as bool? ?? false,
       resolvedBy: json['resolvedBy'] as String?,
-      resolvedAt: json['resolvedAt'] != null
-          ? DateTime.parse(json['resolvedAt'] as String)
-          : null,
+      resolvedAt: DateParser.fromServerNullable(json['resolvedAt'] as String?),
       resolutionNote: json['resolutionNote'] as String?,
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      createdAt: DateParser.fromServer(json['createdAt'] as String),
     );
   }
 

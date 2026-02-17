@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:voca_crm/core/utils/date_parser.dart';
 
 /// 알림 엔티티
 class AppNotification extends Equatable {
@@ -46,8 +47,8 @@ class AppNotification extends Equatable {
           : null,
       status: NotificationStatus.fromString(json['status'] as String),
       isRead: json['isRead'] as bool? ?? false,
-      readAt: json['readAt'] != null ? DateTime.parse(json['readAt'] as String) : null,
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      readAt: DateParser.fromServerNullable(json['readAt'] as String?),
+      createdAt: DateParser.fromServer(json['createdAt'] as String),
     );
   }
 

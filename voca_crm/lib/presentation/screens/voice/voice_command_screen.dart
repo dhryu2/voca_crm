@@ -43,6 +43,7 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
   // Animation Controllers
   late AnimationController _pulseController;
   late AnimationController _waveController;
+  late AnimationController _processingController;
   late Animation<double> _pulseAnimation;
 
   // Services
@@ -58,6 +59,7 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
   // Voice Recognition
   String _recognizedText = '';
   String _statusMessage = '마이크 버튼을 눌러 시작하세요';
+  String _pendingUserText = '';
 
   // Conversation
   List<Member> _recentMembers = [];
@@ -115,20 +117,25 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1000),
     );
+
+    _processingController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat();
   }
 
   /// 권한 확인 및 초기화
   Future<void> _checkPermissionsAndInitialize() async {
-    // 마이크 권한 확인
-    var micStatus = await Permission.microphone.status;
+    // 마이크 + 음성 인식 권한 동시 요청
+    final statuses = await [
+      Permission.microphone,
+      Permission.speech,
+    ].request();
 
-    if (micStatus.isDenied) {
-      // 권한 요청
-      micStatus = await Permission.microphone.request();
-    }
+    final micStatus = statuses[Permission.microphone]!;
+    final speechStatus = statuses[Permission.speech]!;
 
-    if (micStatus.isPermanentlyDenied) {
-      // 영구 거부된 경우
+    if (micStatus.isPermanentlyDenied || speechStatus.isPermanentlyDenied) {
       setState(() {
         _currentState = VoiceState.permissionDenied;
         _statusMessage = '마이크 권한이 필요합니다';
@@ -137,7 +144,7 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
       return;
     }
 
-    if (micStatus.isDenied) {
+    if (micStatus.isDenied || speechStatus.isDenied) {
       setState(() {
         _currentState = VoiceState.permissionDenied;
         _statusMessage = '마이크 권한이 거부되었습니다';
@@ -146,7 +153,6 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
     }
 
     // 권한 승인됨 - 초기화 진행
-
     await _initSpeech();
     await _initTts();
   }
@@ -334,6 +340,7 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
     setState(() {
       _currentState = VoiceState.listening;
       _recognizedText = '';
+      _pendingUserText = '';
       _statusMessage = '듣고 있습니다...';
     });
 
@@ -346,8 +353,13 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
           _recognizedText = result.recognizedWords;
           if (_recognizedText.isNotEmpty) {
             _statusMessage = '"$_recognizedText"';
+            _pendingUserText = _recognizedText;
           }
         });
+
+        if (_pendingUserText.isNotEmpty) {
+          _scrollToBottom();
+        }
 
         if (result.finalResult && _recognizedText.isNotEmpty) {
           _processVoiceCommand(_recognizedText);
@@ -357,6 +369,7 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
       localeId: 'ko_KR',
       cancelOnError: false,
       partialResults: true,
+      pauseFor: const Duration(seconds: 2),
       listenFor: const Duration(seconds: 10),
     );
   }
@@ -369,6 +382,7 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
       _currentState = VoiceState.ready;
       _statusMessage = '음성 인식 중지됨';
       _autoRestart = false;
+      _pendingUserText = '';
     });
     _stopAnimations();
   }
@@ -396,8 +410,10 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
         ChatMessage(text: text, isUser: isUser, timestamp: DateTime.now()),
       );
     });
+    _scrollToBottom();
+  }
 
-    // 스크롤 애니메이션
+  void _scrollToBottom() {
     Future.delayed(const Duration(milliseconds: 100), () {
       if (_chatScrollController.hasClients) {
         _chatScrollController.animateTo(
@@ -410,7 +426,10 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
   }
 
   Future<void> _processVoiceCommand(String text) async {
-    // 사용자 메시지 추가
+    // 실시간 입력 버블 제거 후 확정 메시지로 추가
+    setState(() {
+      _pendingUserText = '';
+    });
     _addChatMessage(text, isUser: true);
 
     setState(() {
@@ -526,6 +545,17 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
         _isWaitingForNumberResponse = false;
         _conversationContext = response.context;
       });
+      await _speak(response.message);
+      return;
+    }
+
+    if (currentStepType == 'content_input') {
+      setState(() {
+        _isConfirmationStep = false;
+        _isWaitingForNumberResponse = false;
+        _conversationContext = response.context;
+      });
+      _addChatMessage(response.message, isUser: false);
       await _speak(response.message);
       return;
     }
@@ -740,6 +770,10 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
   }
 
   void _cancelConversation() {
+    _flutterTts.stop();
+    if (_speech.isListening) _speech.stop();
+    _stopAnimations();
+
     setState(() {
       _conversationContext = null;
       _candidateMembers = [];
@@ -750,14 +784,11 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
       _lastSearchKeyword = null;
       _currentMember = null;
       _currentMemo = null;
-      _statusMessage = '대화가 취소되었습니다';
+      _pendingUserText = '';
+      _chatMessages.clear();
+      _currentState = VoiceState.ready;
+      _statusMessage = '마이크 버튼을 눌러 시작하세요';
     });
-
-    _flutterTts.stop();
-    if (_speech.isListening) _speech.stop();
-    _stopAnimations();
-
-    _addChatMessage('대화가 취소되었습니다.', isUser: false);
   }
 
   void _clearChat() {
@@ -765,6 +796,7 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
       _chatMessages.clear();
       _currentMember = null;
       _currentMemo = null;
+      _pendingUserText = '';
     });
   }
 
@@ -895,6 +927,7 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
   void dispose() {
     _pulseController.dispose();
     _waveController.dispose();
+    _processingController.dispose();
     _chatScrollController.dispose();
     _speech.stop();
     _flutterTts.stop();
@@ -928,6 +961,7 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
             Expanded(
               child:
                   _chatMessages.isEmpty &&
+                      _pendingUserText.isEmpty &&
                       _candidateMembers.isEmpty &&
                       _candidateMemos.isEmpty
                   ? _buildEmptyState()
@@ -1030,24 +1064,6 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
           ),
           SizedBox(width: screenWidth * 0.02),
           _buildSpeedSelector(),
-          if (_chatMessages.isNotEmpty) ...[
-            SizedBox(width: screenWidth * 0.02),
-            GestureDetector(
-              onTap: _clearChat,
-              child: Container(
-                padding: EdgeInsets.all(screenWidth * 0.02),
-                decoration: BoxDecoration(
-                  color: ThemeColor.neutral100,
-                  borderRadius: BorderRadius.circular(screenWidth * 0.02),
-                ),
-                child: Icon(
-                  Icons.delete_outline,
-                  size: screenWidth * 0.045,
-                  color: ThemeColor.textSecondary,
-                ),
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -1322,64 +1338,57 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
         icon = Icons.mic_none;
     }
 
-    return AnimatedBuilder(
-      animation: _pulseAnimation,
-      builder: (context, child) {
-        return Transform.scale(
-          scale:
-              _currentState == VoiceState.listening ||
-                  _currentState == VoiceState.speaking
-              ? _pulseAnimation.value
-              : 1.0,
-          child: Container(
-            width: double.infinity,
-            padding: EdgeInsets.all(screenWidth * 0.06),
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(screenWidth * 0.06),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(screenWidth * 0.05),
+        border: Border.all(color: iconColor.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: screenWidth * 0.2,
+            height: screenWidth * 0.2,
             decoration: BoxDecoration(
-              color: bgColor,
-              borderRadius: BorderRadius.circular(screenWidth * 0.05),
-              border: Border.all(color: iconColor.withValues(alpha: 0.3)),
+              color: iconColor.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
             ),
-            child: Column(
-              children: [
-                Container(
-                  width: screenWidth * 0.2,
-                  height: screenWidth * 0.2,
-                  decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icon, size: screenWidth * 0.1, color: iconColor),
-                ),
-                SizedBox(height: screenHeight * 0.02),
-                Text(
-                  _statusMessage,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: screenWidth * 0.04,
-                    fontWeight: FontWeight.w600,
-                    color: iconColor,
-                  ),
-                ),
-                if (_currentState == VoiceState.permissionDenied) ...[
-                  SizedBox(height: screenHeight * 0.015),
-                  ElevatedButton.icon(
-                    onPressed: _showPermissionDeniedDialog,
-                    icon: Icon(Icons.settings, size: screenWidth * 0.045),
-                    label: const Text('권한 설정'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: iconColor,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(screenWidth * 0.02),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
+            child: _currentState == VoiceState.processing
+                ? RotationTransition(
+                    turns: _processingController,
+                    child: Icon(icon, size: screenWidth * 0.1, color: iconColor),
+                  )
+                : Icon(icon, size: screenWidth * 0.1, color: iconColor),
+          ),
+          SizedBox(height: screenHeight * 0.02),
+          Text(
+            _statusMessage,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: screenWidth * 0.04,
+              fontWeight: FontWeight.w600,
+              color: iconColor,
             ),
           ),
-        );
-      },
+          if (_currentState == VoiceState.permissionDenied) ...[
+            SizedBox(height: screenHeight * 0.015),
+            ElevatedButton.icon(
+              onPressed: _showPermissionDeniedDialog,
+              icon: Icon(Icons.settings, size: screenWidth * 0.045),
+              label: const Text('권한 설정'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: iconColor,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(screenWidth * 0.02),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -1490,6 +1499,10 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
   Widget _buildChatView() {
     final screenWidth = MediaQuery.of(context).size.width;
     final bottomNavPadding = MainScreen.navBarHeight + MediaQuery.of(context).padding.bottom;
+    final hasPending = _pendingUserText.isNotEmpty;
+    final memberOffset = _currentMember != null ? 1 : 0;
+    final pendingOffset = hasPending ? 1 : 0;
+    final totalCount = _chatMessages.length + memberOffset + pendingOffset;
 
     return ListView.builder(
       controller: _chatScrollController,
@@ -1499,13 +1512,19 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
         top: screenWidth * 0.04,
         bottom: bottomNavPadding,
       ),
-      itemCount: _chatMessages.length + (_currentMember != null ? 1 : 0),
+      itemCount: totalCount,
       itemBuilder: (context, index) {
         if (_currentMember != null && index == 0) {
           return _buildMemberInfoCard();
         }
 
-        final msgIndex = _currentMember != null ? index - 1 : index;
+        final msgIndex = index - memberOffset;
+
+        // 마지막 아이템이 실시간 입력 버블
+        if (hasPending && msgIndex == _chatMessages.length) {
+          return _buildPendingBubble();
+        }
+
         final message = _chatMessages[msgIndex];
         return _buildChatBubble(message);
       },
@@ -1665,6 +1684,53 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
             fontSize: screenWidth * 0.0375,
             color: message.isUser ? Colors.white : ThemeColor.textPrimary,
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPendingBubble() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Container(
+        margin: EdgeInsets.only(bottom: screenHeight * 0.015),
+        padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.04, vertical: screenHeight * 0.015),
+        constraints: BoxConstraints(
+          maxWidth: screenWidth * 0.75,
+        ),
+        decoration: BoxDecoration(
+          color: ThemeColor.primary.withValues(alpha: 0.7),
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(screenWidth * 0.04),
+            topRight: Radius.circular(screenWidth * 0.04),
+            bottomLeft: Radius.circular(screenWidth * 0.04),
+            bottomRight: Radius.circular(screenWidth * 0.01),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                _pendingUserText,
+                style: TextStyle(
+                  fontSize: screenWidth * 0.0375,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+            SizedBox(width: screenWidth * 0.02),
+            SizedBox(
+              width: screenWidth * 0.03,
+              height: screenWidth * 0.03,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white.withValues(alpha: 0.7)),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1994,11 +2060,20 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
                               ),
                             ],
                           ),
-                          child: Icon(
-                            _getMicIcon(),
-                            size: screenWidth * 0.08,
-                            color: Colors.white,
-                          ),
+                          child: _currentState == VoiceState.processing
+                              ? RotationTransition(
+                                  turns: _processingController,
+                                  child: Icon(
+                                    _getMicIcon(),
+                                    size: screenWidth * 0.08,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Icon(
+                                  _getMicIcon(),
+                                  size: screenWidth * 0.08,
+                                  color: Colors.white,
+                                ),
                         ),
                       );
                     },

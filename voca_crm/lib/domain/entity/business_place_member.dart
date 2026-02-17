@@ -1,3 +1,5 @@
+import 'package:voca_crm/core/utils/date_parser.dart';
+
 import 'user_business_place.dart';
 
 /// 사업장 멤버 정보 DTO
@@ -37,7 +39,7 @@ class BusinessPlaceMember {
       phone: json['phone'],
       email: json['email'],
       displayName: json['displayName'],
-      joinedAt: DateTime.parse(json['joinedAt']),
+      joinedAt: DateParser.fromServer(json['joinedAt']),
     );
   }
 

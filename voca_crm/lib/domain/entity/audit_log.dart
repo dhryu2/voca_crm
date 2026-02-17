@@ -1,3 +1,5 @@
+import 'package:voca_crm/core/utils/date_parser.dart';
+
 /// 감사 로그 엔티티
 class AuditLog {
   final String id;
@@ -53,7 +55,7 @@ class AuditLog {
       deviceInfo: json['deviceInfo'] as String?,
       requestUri: json['requestUri'] as String?,
       httpMethod: json['httpMethod'] as String?,
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      createdAt: DateParser.fromServer(json['createdAt'] as String),
     );
   }
 

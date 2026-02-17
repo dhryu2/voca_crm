@@ -1,3 +1,5 @@
+import 'package:voca_crm/core/utils/date_parser.dart';
+
 enum Role {
   OWNER,
   MANAGER,
@@ -44,8 +46,8 @@ class UserBusinessPlace {
       businessPlaceId: json['businessPlaceId'],
       role: Role.fromString(json['role']),
       status: AccessStatus.fromString(json['status']),
-      createdAt: DateTime.parse(json['createdAt']),
-      updatedAt: DateTime.parse(json['updatedAt']),
+      createdAt: DateParser.fromServer(json['createdAt']),
+      updatedAt: DateParser.fromServer(json['updatedAt']),
     );
   }
 

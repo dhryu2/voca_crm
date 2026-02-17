@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:voca_crm/core/network/api_client.dart';
+import 'package:voca_crm/core/utils/date_parser.dart';
 
 class HomeStatistics {
   final String businessPlaceId;
@@ -42,7 +43,7 @@ class TimeSeriesDataPoint {
 
   factory TimeSeriesDataPoint.fromJson(Map<String, dynamic> json) {
     return TimeSeriesDataPoint(
-      date: DateTime.parse(json['date']),
+      date: DateParser.fromServer(json['date']),
       count: json['count'] ?? 0,
     );
   }
@@ -156,7 +157,7 @@ class RecentActivity {
       memberId: json['memberId'] ?? '',
       memberName: json['memberName'] ?? '',
       content: json['content'] ?? '',
-      activityTime: DateTime.parse(json['activityTime']),
+      activityTime: DateParser.fromServer(json['activityTime']),
     );
   }
 }

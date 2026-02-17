@@ -8,6 +8,8 @@ import 'package:voca_crm/data/datasource/biometric_service.dart';
 import 'package:voca_crm/domain/entity/tokens.dart';
 import 'package:voca_crm/domain/entity/user.dart';
 import 'package:voca_crm/presentation/screens/auth/login_screen.dart';
+import 'package:voca_crm/presentation/viewmodels/user_view_model.dart';
+import 'package:provider/provider.dart';
 
 import 'main_screen.dart';
 
@@ -116,6 +118,7 @@ class _SplashScreenState extends State<SplashScreen>
       if (!mounted) return;
 
       if (user != null) {
+        Provider.of<UserViewModel>(context, listen: false).setUser(user);
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => MainScreen(user: user)),
         );

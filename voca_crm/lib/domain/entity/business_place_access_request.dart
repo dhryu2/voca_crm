@@ -1,3 +1,5 @@
+import 'package:voca_crm/core/utils/date_parser.dart';
+
 import 'user_business_place.dart';
 
 class BusinessPlaceAccessRequest {
@@ -46,12 +48,12 @@ class BusinessPlaceAccessRequest {
       businessPlaceId: json['businessPlaceId'],
       role: Role.fromString(json['role']),
       status: AccessStatus.fromString(json['status']),
-      requestedAt: DateTime.parse(json['requestedAt']),
-      processedAt: json['processedAt'] != null ? DateTime.parse(json['processedAt']) : null,
+      requestedAt: DateParser.fromServer(json['requestedAt']),
+      processedAt: DateParser.fromServerNullable(json['processedAt']),
       processedBy: json['processedBy'],
       isReadByRequester: json['isReadByRequester'] ?? false,
-      createdAt: DateTime.parse(json['createdAt']),
-      updatedAt: DateTime.parse(json['updatedAt']),
+      createdAt: DateParser.fromServer(json['createdAt']),
+      updatedAt: DateParser.fromServer(json['updatedAt']),
       // 요청자 정보
       requesterName: json['requesterName'],
       requesterPhone: json['requesterPhone'],

@@ -1,3 +1,5 @@
+import 'package:voca_crm/core/utils/date_parser.dart';
+
 class BusinessPlace {
   final String id;
   final String name;
@@ -21,8 +23,8 @@ class BusinessPlace {
       name: json['name'],
       address: json['address'],
       phone: json['phone'],
-      createdAt: DateTime.parse(json['createdAt']),
-      updatedAt: DateTime.parse(json['updatedAt']),
+      createdAt: DateParser.fromServer(json['createdAt']),
+      updatedAt: DateParser.fromServer(json['updatedAt']),
     );
   }
 

@@ -1,4 +1,5 @@
 import 'package:jwt_decoder/jwt_decoder.dart';
+import 'package:voca_crm/core/utils/date_parser.dart';
 
 class User {
   final String id;
@@ -62,10 +63,10 @@ class User {
       pushNotificationEnabled: json['pushNotificationEnabled'] ?? true,
       isSystemAdmin: json['isSystemAdmin'] ?? false,
       createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'])
+          ? DateParser.fromServer(json['createdAt'])
           : DateTime.now(),
       updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'])
+          ? DateParser.fromServer(json['updatedAt'])
           : DateTime.now(),
     );
   }

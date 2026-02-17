@@ -1,3 +1,5 @@
+import 'package:voca_crm/core/utils/date_parser.dart';
+
 class Notice {
   final String id;
   final String title;
@@ -28,16 +30,16 @@ class Notice {
       id: json['id'] as String,
       title: json['title'] as String,
       content: json['content'] as String,
-      startDate: DateTime.parse(json['startDate'] as String),
-      endDate: DateTime.parse(json['endDate'] as String),
+      startDate: DateParser.fromServer(json['startDate'] as String),
+      endDate: DateParser.fromServer(json['endDate'] as String),
       priority: json['priority'] as int,
       isActive: json['isActive'] as bool,
       createdByUserId: json['createdByUserId'] as String?,
       createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
+          ? DateParser.fromServer(json['createdAt'] as String)
           : DateTime.now(),
       updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
+          ? DateParser.fromServer(json['updatedAt'] as String)
           : DateTime.now(),
     );
   }

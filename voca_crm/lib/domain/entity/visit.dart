@@ -1,3 +1,4 @@
+import 'package:voca_crm/core/utils/date_parser.dart';
 import 'package:voca_crm/domain/entity/member.dart';
 
 /// 방문 기록(Visit) 엔티티 클래스
@@ -30,10 +31,10 @@ class Visit {
           ? Member.fromJson(json['member'] as Map<String, dynamic>)
           : null,
       visitorId: json['visitorId'] as String?,
-      visitedAt: DateTime.parse(json['visitedAt'] as String),
+      visitedAt: DateParser.fromServer(json['visitedAt'] as String),
       note: json['note'] as String?,
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      updatedAt: DateTime.parse(json['updatedAt'] as String),
+      createdAt: DateParser.fromServer(json['createdAt'] as String),
+      updatedAt: DateParser.fromServer(json['updatedAt'] as String),
     );
   }
 

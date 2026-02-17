@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:provider/provider.dart';
 import 'package:voca_crm/core/auth/token_manager.dart' as app_token;
@@ -90,6 +92,9 @@ void main() async {
           'Please check your .env file.',
         );
       }
+
+      // 한국어 날짜 포맷 초기화
+      await initializeDateFormatting('ko_KR');
 
       // Kakao SDK 초기화
       KakaoSdk.init(nativeAppKey: EnvConfig.kakaoNativeAppKey);
@@ -196,6 +201,16 @@ class RootApp extends StatelessWidget {
         child: MaterialApp(
           navigatorKey: navigatorKey,
           title: 'CRM Voice App',
+          locale: const Locale('ko', 'KR'),
+          supportedLocales: const [
+            Locale('ko', 'KR'),
+            Locale('en', 'US'),
+          ],
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
         theme: ThemeData(
         // Primary Color based on #1c06b1
         primarySwatch: createMaterialColor(ThemeColor.primaryPurple),

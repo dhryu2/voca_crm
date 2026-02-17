@@ -1,3 +1,5 @@
+import 'package:voca_crm/core/utils/date_parser.dart';
+
 /// 회원 등급
 enum MemberGrade {
   GENERAL,
@@ -74,15 +76,13 @@ class Member {
       grade: json['grade'] as String?,
       remark: json['remark'] as String?,
       isDeleted: json['isDeleted'] as bool? ?? false,
-      deletedAt: json['deletedAt'] != null
-          ? DateTime.parse(json['deletedAt'] as String)
-          : null,
+      deletedAt: DateParser.fromServerNullable(json['deletedAt'] as String?),
       deletedBy: json['deletedBy'] as String?,
       createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
+          ? DateParser.fromServer(json['createdAt'] as String)
           : DateTime.now(),
       updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
+          ? DateParser.fromServer(json['updatedAt'] as String)
           : DateTime.now(),
     );
   }

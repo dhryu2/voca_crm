@@ -1,3 +1,5 @@
+import 'package:voca_crm/core/utils/date_parser.dart';
+
 import 'business_place.dart';
 import 'user_business_place.dart';
 
@@ -24,10 +26,10 @@ class BusinessPlaceWithRole {
         address: json['businessPlaceAddress'],
         phone: json['businessPlacePhone'],
         createdAt: json['businessPlaceCreatedAt'] != null
-            ? DateTime.parse(json['businessPlaceCreatedAt'])
+            ? DateParser.fromServer(json['businessPlaceCreatedAt'])
             : now,
         updatedAt: json['businessPlaceUpdatedAt'] != null
-            ? DateTime.parse(json['businessPlaceUpdatedAt'])
+            ? DateParser.fromServer(json['businessPlaceUpdatedAt'])
             : now,
       ),
       userRole: Role.fromString(json['userRole']),

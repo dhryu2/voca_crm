@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:voca_crm/core/notification/business_place_change_notifier.dart';
-import 'package:voca_crm/presentation/viewmodels/user_view_model.dart';
 import 'package:voca_crm/core/theme/theme_color.dart';
 import 'package:voca_crm/core/utils/haptic_helper.dart';
 import 'package:voca_crm/core/utils/message_handler.dart';
@@ -18,6 +17,7 @@ import 'package:voca_crm/domain/entity/business_place_with_role.dart';
 import 'package:voca_crm/domain/entity/member.dart';
 import 'package:voca_crm/domain/entity/reservation.dart';
 import 'package:voca_crm/domain/entity/user.dart';
+import 'package:voca_crm/presentation/viewmodels/user_view_model.dart';
 import 'package:voca_crm/presentation/widgets/character_count_text_field.dart';
 import 'package:voca_crm/presentation/widgets/member_search_dialog.dart';
 
@@ -43,6 +43,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   List<Reservation> _reservations = [];
   List<Reservation> _selectedDayReservations = [];
   bool _isLoading = true;
+  bool _isCalendarLoading = false;
   String? _error;
 
   // 사업장 상태
@@ -60,7 +61,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final userViewModel = Provider.of<UserViewModel>(context, listen: false);
       final currentUser = userViewModel.user;
-      _selectedBusinessPlaceId = currentUser?.defaultBusinessPlaceId ?? widget.user.defaultBusinessPlaceId;
+      _selectedBusinessPlaceId =
+          currentUser?.defaultBusinessPlaceId ??
+          widget.user.defaultBusinessPlaceId;
       _initializeData();
     });
 
@@ -76,12 +79,14 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     super.didChangeDependencies();
     // UserViewModel의 defaultBusinessPlaceId 변경 감지
     final userViewModel = Provider.of<UserViewModel>(context);
-    final newDefaultBusinessPlaceId = userViewModel.user?.defaultBusinessPlaceId;
+    final newDefaultBusinessPlaceId =
+        userViewModel.user?.defaultBusinessPlaceId;
 
     // 기본 사업장이 변경되었고, 현재 선택된 사업장이 없으면 새 기본값 사용
     if (newDefaultBusinessPlaceId != null &&
         newDefaultBusinessPlaceId.isNotEmpty &&
-        (_selectedBusinessPlaceId == null || _selectedBusinessPlaceId!.isEmpty)) {
+        (_selectedBusinessPlaceId == null ||
+            _selectedBusinessPlaceId!.isEmpty)) {
       setState(() {
         _selectedBusinessPlaceId = newDefaultBusinessPlaceId;
       });
@@ -120,7 +125,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     }
   }
 
-  Future<void> _loadReservations() async {
+  Future<void> _loadReservations({bool isPageChange = false}) async {
     if (_selectedBusinessPlaceId == null || _selectedBusinessPlaceId!.isEmpty) {
       setState(() {
         _isLoading = false;
@@ -130,7 +135,11 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     }
 
     setState(() {
-      _isLoading = true;
+      if (isPageChange) {
+        _isCalendarLoading = true;
+      } else {
+        _isLoading = true;
+      }
       _error = null;
     });
 
@@ -149,12 +158,14 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       setState(() {
         _reservations = reservations;
         _isLoading = false;
+        _isCalendarLoading = false;
         _updateSelectedDayReservations();
       });
     } catch (e, stackTrace) {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
+        _isCalendarLoading = false;
         _error = AppMessageHandler.parseErrorMessage(e);
       });
       if (mounted) {
@@ -781,38 +792,52 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                 _buildRetentionNotice(screenWidth),
 
                 // Calendar
-                Container(
-                  color: Colors.white,
-                  child: TableCalendar(
-                    firstDay: DateTime.utc(2020, 1, 1),
-                    lastDay: DateTime.utc(2030, 12, 31),
-                    focusedDay: _focusedDay,
-                    selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-                    onDaySelected: _onDaySelected,
-                    onPageChanged: (focusedDay) {
-                      _focusedDay = focusedDay;
-                      _loadReservations();
-                    },
-                    calendarStyle: CalendarStyle(
-                      todayDecoration: BoxDecoration(
-                        color: ThemeColor.primary.withValues(alpha: 0.3),
-                        shape: BoxShape.circle,
-                      ),
-                      selectedDecoration: BoxDecoration(
-                        color: ThemeColor.primary,
-                        shape: BoxShape.circle,
-                      ),
-                      markerDecoration: BoxDecoration(
-                        color: ThemeColor.primary.withValues(alpha: 0.7),
-                        shape: BoxShape.circle,
+                Stack(
+                  children: [
+                    Container(
+                      color: Colors.white,
+                      child: TableCalendar(
+                        locale: 'ko_KR',
+                        firstDay: DateTime.utc(2020, 1, 1),
+                        lastDay: DateTime.utc(2030, 12, 31),
+                        focusedDay: _focusedDay,
+                        selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+                        onDaySelected: _onDaySelected,
+                        onPageChanged: (focusedDay) {
+                          _focusedDay = focusedDay;
+                          _loadReservations(isPageChange: true);
+                        },
+                        calendarStyle: CalendarStyle(
+                          todayDecoration: BoxDecoration(
+                            color: ThemeColor.primary.withValues(alpha: 0.3),
+                            shape: BoxShape.circle,
+                          ),
+                          selectedDecoration: BoxDecoration(
+                            color: ThemeColor.primary,
+                            shape: BoxShape.circle,
+                          ),
+                          markerDecoration: BoxDecoration(
+                            color: ThemeColor.primary.withValues(alpha: 0.7),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        eventLoader: _getReservationsForDay,
+                        headerStyle: const HeaderStyle(
+                          formatButtonVisible: false,
+                          titleCentered: true,
+                        ),
                       ),
                     ),
-                    eventLoader: _getReservationsForDay,
-                    headerStyle: const HeaderStyle(
-                      formatButtonVisible: false,
-                      titleCentered: true,
-                    ),
-                  ),
+                    if (_isCalendarLoading)
+                      Positioned.fill(
+                        child: Container(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          child: const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
                 SizedBox(height: screenWidth * 0.04),
 
@@ -901,7 +926,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
         heroTag: 'reservations_fab',
         onPressed: _showAddReservationDialog,
         backgroundColor: ThemeColor.primary,
-        child: const Icon(Icons.add),
+        child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }
