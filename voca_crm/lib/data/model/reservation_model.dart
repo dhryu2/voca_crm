@@ -1,3 +1,4 @@
+import 'package:voca_crm/core/utils/date_parser.dart';
 import 'package:voca_crm/domain/entity/reservation.dart';
 
 /// 예약 데이터 모델
@@ -100,8 +101,8 @@ class ReservationModel {
       remark: remark,
       createdBy: createdBy,
       updatedBy: updatedBy,
-      createdAt: DateTime.parse(createdAt),
-      updatedAt: DateTime.parse(updatedAt),
+      createdAt: DateParser.fromServer(createdAt),
+      updatedAt: DateParser.fromServer(updatedAt),
     );
   }
 
