@@ -63,6 +63,8 @@ public class JwtUtil {
             String username,
             String phone,
             String email,
+            String displayName,
+            Boolean pushNotificationEnabled,
             String defaultBusinessPlaceId,
             boolean isSystemAdmin
     ) {
@@ -71,6 +73,8 @@ public class JwtUtil {
                 username,
                 phone,
                 email,
+                displayName,
+                pushNotificationEnabled,
                 defaultBusinessPlaceId,
                 isSystemAdmin,
                 accessTokenValidity
@@ -95,6 +99,8 @@ public class JwtUtil {
             String username,
             String phone,
             String email,
+            String displayName,
+            Boolean pushNotificationEnabled,
             String defaultBusinessPlaceId,
             boolean isSystemAdmin,
             Long validity
@@ -107,6 +113,8 @@ public class JwtUtil {
                 .claim("username", username)
                 .claim("email", email)
                 .claim("phone", phone)
+                .claim("displayName", displayName)
+                .claim("pushNotificationEnabled", pushNotificationEnabled)
                 .claim("defaultBusinessPlaceId", defaultBusinessPlaceId)
                 .claim("isSystemAdmin", isSystemAdmin)
                 .issuedAt(now)

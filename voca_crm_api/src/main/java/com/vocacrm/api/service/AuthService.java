@@ -198,6 +198,8 @@ public class AuthService {
                     user.getUsername(),
                     user.getPhone(),
                     user.getEmail(),
+                    user.getDisplayName(),
+                    user.getPushNotificationEnabled(),
                     user.getDefaultBusinessPlaceId(),
                     isAdmin);
 
@@ -267,6 +269,8 @@ public class AuthService {
                 user.getUsername(),
                 user.getPhone(),
                 user.getEmail(),
+                user.getDisplayName(),
+                user.getPushNotificationEnabled(),
                 user.getDefaultBusinessPlaceId(),
                 isAdmin);
 
