@@ -534,6 +534,15 @@ class _CustomersScreenState extends State<CustomersScreen> {
                               return;
                             }
 
+                            if (selectedBusinessPlaceId == null ||
+                                selectedBusinessPlaceId!.isEmpty) {
+                              AppMessageHandler.showErrorSnackBar(
+                                context,
+                                '사업장을 먼저 선택해주세요',
+                              );
+                              return;
+                            }
+
                             try {
                               await _memberRepository.createMember(
                                 businessPlaceId: selectedBusinessPlaceId,
