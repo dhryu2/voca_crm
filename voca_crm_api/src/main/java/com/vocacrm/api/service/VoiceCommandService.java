@@ -78,12 +78,11 @@ public class VoiceCommandService {
      * 새로운 명령 처리 (내부)
      */
     private VoiceCommandResponse processNewCommandInternal(VoiceCommandRequest request, String businessPlaceId) {
-        // AI 서버에 명령 분석 요청
-        AiAnalysisResult aiResult = aiServerClient.analyzeCommand(request.getText());
+        // AI 서버에 명령 분석 요청 (멀티액션 시 결과가 여러 개)
+        List<AiAnalysisResult> aiResults = aiServerClient.analyzeCommand(request.getText());
 
-        // 에러 응답 처리
-        if (aiResult.isError()) {
-            return handleErrorResponse(aiResult);
+        if (aiResults.isEmpty()) {
+            return createErrorResponse("AI 분석 결과를 받지 못했습니다.", "AI_NO_RESULT");
         }
 
         // 컨텍스트 생성 (requestUserId 포함)
@@ -93,8 +92,52 @@ public class VoiceCommandService {
                 .requestUserId(request.getUserId())
                 .build();
 
-        // 카테고리에 따라 처리
-        return routeByCategory(aiResult, context);
+        // 단일 액션: 기존 대화형 처리 흐름 유지
+        if (aiResults.size() == 1) {
+            AiAnalysisResult aiResult = aiResults.get(0);
+            if (aiResult.isError()) {
+                return handleErrorResponse(aiResult);
+            }
+            return routeByCategory(aiResult, context);
+        }
+
+        // 멀티액션: 순차 실행 후 결과 집계
+        return processMultipleActions(aiResults, context);
+    }
+
+    /**
+     * 멀티액션 순차 처리
+     * 한 명령에 여러 작업이 포함된 경우(예: "등록하고 바로 체크인") 각 작업을 순서대로 실행한다.
+     * 주의: 배치 실행 중에는 후보 선택/확인 같은 대화형(clarification) 단계를 이어가지 않고,
+     *       각 단계의 결과 메시지를 모아 한 번에 반환한다.
+     */
+    private VoiceCommandResponse processMultipleActions(List<AiAnalysisResult> aiResults, ConversationContextDTO context) {
+        List<String> messages = new ArrayList<>();
+        List<Map<String, Object>> steps = new ArrayList<>();
+
+        for (AiAnalysisResult aiResult : aiResults) {
+            VoiceCommandResponse stepResponse = aiResult.isError()
+                    ? handleErrorResponse(aiResult)
+                    : routeByCategory(aiResult, context);
+
+            if (stepResponse.getMessage() != null) {
+                messages.add(stepResponse.getMessage());
+            }
+
+            Map<String, Object> step = new HashMap<>();
+            step.put("status", stepResponse.getStatus());
+            step.put("message", stepResponse.getMessage());
+            if (stepResponse.getData() != null) {
+                step.put("data", stepResponse.getData());
+            }
+            steps.add(step);
+        }
+
+        return VoiceCommandResponse.builder()
+                .status("completed")
+                .message(String.join(" ", messages))
+                .data(Map.of("steps", steps))
+                .build();
     }
 
     /**
@@ -154,7 +197,14 @@ public class VoiceCommandService {
 
     private VoiceCommandResponse handleMemberSearch(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String specificMemberId = getSelectedMemberId(context);
-        List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId());
+        Map<String, Object> searchCriteria = aiResult.getSearchCriteria();
+
+        // 검색 조건이 전혀 없으면 전체 회원 조회로 처리 (예: "전체 회원 보여줘")
+        if (specificMemberId == null && (searchCriteria == null || searchCriteria.isEmpty())) {
+            return handleMemberGetAll(aiResult, context);
+        }
+
+        List<Member> members = findMembersBySearchCriteria(searchCriteria, specificMemberId, context.getBusinessPlaceId());
 
         if (members.isEmpty()) {
             return createCompletedResponse("조건에 맞는 회원을 찾을 수 없습니다.", Map.of());
@@ -893,16 +943,23 @@ public class VoiceCommandService {
             return Collections.emptyList();
         }
 
-        String memberNumber = (String) searchCriteria.get("memberNumber");
-        String name = (String) searchCriteria.get("name");
-        String phone = (String) searchCriteria.get("phone");
-        String email = (String) searchCriteria.get("email");
+        // AI가 placeholder("MISSING_PARAMETER")나 빈 값을 채운 경우 제거 (잘못된 조회 방지)
+        String memberNumber = sanitizeCriteria((String) searchCriteria.get("memberNumber"));
+        String name = sanitizeCriteria((String) searchCriteria.get("name"));
+        String phone = sanitizeCriteria((String) searchCriteria.get("phone"));
+        String email = sanitizeCriteria((String) searchCriteria.get("email"));
+
+        // 유효한 조건이 하나도 없으면 빈 결과 반환
+        // (searchMembers는 조건이 전부 비면 사업장 전체 회원을 반환하므로, 수정·삭제 오작동을 막기 위해 차단)
+        if (memberNumber == null && name == null && phone == null && email == null) {
+            return Collections.emptyList();
+        }
 
         // 회원번호로 검색
-        if (memberNumber != null && !memberNumber.isEmpty()) {
+        if (memberNumber != null) {
             List<Member> members = memberService.getMembersByNumber(memberNumber, businessPlaceId);
             // 이름도 있으면 추가 필터링
-            if (name != null && !name.isEmpty()) {
+            if (name != null) {
                 members = members.stream()
                         .filter(m -> m.getName().contains(name))
                         .collect(Collectors.toList());
@@ -912,6 +969,21 @@ public class VoiceCommandService {
 
         // 이름, 전화번호, 이메일로 검색
         return memberService.searchMembers(null, name, phone, email, businessPlaceId);
+    }
+
+    /**
+     * AI가 채운 검색 조건 값을 정규화한다.
+     * 공백이거나 placeholder("MISSING_PARAMETER")이면 null로 처리해 잘못된 조회를 막는다.
+     */
+    private String sanitizeCriteria(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty() || "MISSING_PARAMETER".equalsIgnoreCase(trimmed)) {
+            return null;
+        }
+        return trimmed;
     }
 
     private String getSelectedMemberId(ConversationContextDTO context) {

@@ -1,6 +1,7 @@
 package com.vocacrm.api.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vocacrm.api.dto.AiAnalysisRequest;
 import com.vocacrm.api.dto.AiAnalysisResult;
@@ -13,7 +14,9 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.time.Duration;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -48,15 +51,15 @@ public class AiServerClient {
      * AI 서버에 텍스트를 전송하여 명령 분석 수행
      *
      * @param text 사용자 음성 명령 텍스트
-     * @return AI가 분석한 결과 (JSON 파싱)
+     * @return AI가 분석한 결과 목록 (멀티액션 시 다수, 단일 명령 시 1개)
      */
-    public AiAnalysisResult analyzeCommand(String text) {
+    public List<AiAnalysisResult> analyzeCommand(String text) {
         // 일일 사용량 제한 체크
         if (!dailyAiUsageLimiter.tryConsume()) {
             log.warn("Daily AI usage limit exceeded. Current: {}, Max: {}",
                     dailyAiUsageLimiter.getCurrentUsage(),
                     dailyAiUsageLimiter.getMaxDailyRequests());
-            return createDailyLimitExceededResult();
+            return Collections.singletonList(createDailyLimitExceededResult());
         }
 
         log.debug("Voice command text: '{}'", text);
@@ -64,17 +67,19 @@ public class AiServerClient {
         // 상세 옵션 설정 (무작위성 제거)
         Map<String, Object> options = new HashMap<>();
         options.put("temperature", 0.0);
-        options.put("num_predict", 128);
+        // 멀티액션 배열 및 긴 메모 내용이 잘리지 않도록 충분히 확보
+        options.put("num_predict", 512);
 
         // 모델이 인식하기 좋게 프롬프트 가공 (Prefix/Suffix 추가)
         String optimizedPrompt = String.format("Input: \"%s\"\nOutput:", text);
 
         // 요청 객체 빌드
+        // 주의: format("json")을 지정하면 출력이 단일 객체로 강제되어 멀티액션 배열이 깨진다.
+        //       Modelfile이 temperature 0 + raw JSON 배열 출력으로 설계되어 있으므로 format을 지정하지 않는다.
         AiAnalysisRequest request = AiAnalysisRequest.builder()
                 .model(modelName)
                 .prompt(optimizedPrompt)
                 .stream(false)
-                .format("json")
                 .options(options)
                 .build();
 
@@ -96,11 +101,11 @@ public class AiServerClient {
                     continue;
                 }
 
-                // JSON 문자열을 AiAnalysisResult로 파싱
-                AiAnalysisResult result = parseAiResponse(response.getResponse());
+                // JSON 문자열을 AiAnalysisResult 목록으로 파싱 (배열/객체 모두 지원)
+                List<AiAnalysisResult> results = parseAiResponse(response.getResponse());
 
-                if (result != null && result.getCategory() != null) {
-                    return result;
+                if (results != null && !results.isEmpty() && results.get(0).getCategory() != null) {
+                    return results;
                 }
 
                 log.warn("Parsed result is incomplete (attempt {})", attempt + 1);
@@ -126,35 +131,44 @@ public class AiServerClient {
 
         // 모든 시도 실패 시 에러 응답 반환
         log.error("All AI server attempts failed");
-        return createErrorResult("AI 서버 응답을 받을 수 없습니다.", lastException);
+        return Collections.singletonList(createErrorResult("AI 서버 응답을 받을 수 없습니다.", lastException));
     }
 
     /**
-     * AI 응답 JSON 문자열을 AiAnalysisResult 객체로 파싱
+     * AI 응답 JSON 문자열을 AiAnalysisResult 목록으로 파싱
+     * 멀티액션 배열([{...},{...}])과 단일 객체({...})를 모두 처리
      */
-    private AiAnalysisResult parseAiResponse(String rawResponse) {
+    private List<AiAnalysisResult> parseAiResponse(String rawResponse) {
         if (rawResponse == null || rawResponse.trim().isEmpty()) {
-            return createErrorResult("AI 응답이 비어있습니다.", null);
+            return Collections.singletonList(createErrorResult("AI 응답이 비어있습니다.", null));
         }
 
         String jsonString = extractJsonFromResponse(rawResponse);
 
         if (jsonString == null) {
             log.error("Could not extract JSON from AI response: {}", rawResponse);
-            return createErrorResult("AI 응답에서 JSON을 추출할 수 없습니다.", null);
+            return Collections.singletonList(createErrorResult("AI 응답에서 JSON을 추출할 수 없습니다.", null));
         }
 
         try {
-            return objectMapper.readValue(jsonString, AiAnalysisResult.class);
+            if (jsonString.startsWith("[")) {
+                List<AiAnalysisResult> results =
+                        objectMapper.readValue(jsonString, new TypeReference<List<AiAnalysisResult>>() {});
+                if (results == null || results.isEmpty()) {
+                    return Collections.singletonList(createErrorResult("AI 응답 배열이 비어있습니다.", null));
+                }
+                return results;
+            }
+            return Collections.singletonList(objectMapper.readValue(jsonString, AiAnalysisResult.class));
         } catch (JsonProcessingException e) {
             log.error("Failed to parse JSON: {} - Error: {}", jsonString, e.getMessage());
-            return createErrorResult("AI 응답 JSON 파싱 오류: " + e.getMessage(), e);
+            return Collections.singletonList(createErrorResult("AI 응답 JSON 파싱 오류: " + e.getMessage(), e));
         }
     }
 
     /**
      * AI 응답에서 JSON 문자열 추출
-     * 다양한 형식의 응답을 처리
+     * 다양한 형식의 응답을 처리 (배열 우선 → 단일 객체)
      */
     private String extractJsonFromResponse(String response) {
         String cleaned = response.trim();
@@ -179,14 +193,27 @@ public class AiServerClient {
         }
         cleaned = cleaned.trim();
 
-        // 3. 직접 JSON인 경우
-        if (cleaned.startsWith("{") && cleaned.endsWith("}")) {
-            if (isValidJson(cleaned)) {
-                return cleaned;
+        // 3. 직접 JSON 배열인 경우 (멀티액션)
+        if (cleaned.startsWith("[") && cleaned.endsWith("]") && isValidJson(cleaned)) {
+            return cleaned;
+        }
+
+        // 4. 직접 JSON 객체인 경우
+        if (cleaned.startsWith("{") && cleaned.endsWith("}") && isValidJson(cleaned)) {
+            return cleaned;
+        }
+
+        // 5. 텍스트 사이에 JSON 배열이 있는 경우 추출
+        int firstBracket = cleaned.indexOf('[');
+        int lastBracket = cleaned.lastIndexOf(']');
+        if (firstBracket != -1 && lastBracket > firstBracket) {
+            String extracted = cleaned.substring(firstBracket, lastBracket + 1);
+            if (isValidJson(extracted)) {
+                return extracted;
             }
         }
 
-        // 4. 텍스트 사이에 JSON이 있는 경우 추출
+        // 6. 텍스트 사이에 JSON 객체가 있는 경우 추출
         int firstBrace = cleaned.indexOf('{');
         int lastBrace = cleaned.lastIndexOf('}');
         if (firstBrace != -1 && lastBrace > firstBrace) {
@@ -196,7 +223,7 @@ public class AiServerClient {
             }
         }
 
-        // 5. 정규식으로 JSON 객체 찾기
+        // 7. 정규식으로 JSON 객체 찾기 (단일 객체 폴백)
         Matcher jsonMatcher = JSON_PATTERN.matcher(cleaned);
         while (jsonMatcher.find()) {
             String candidate = jsonMatcher.group();
@@ -205,7 +232,7 @@ public class AiServerClient {
             }
         }
 
-        // 6. 줄바꿈 제거 후 다시 시도
+        // 8. 줄바꿈 제거 후 다시 시도
         String noNewlines = cleaned.replaceAll("\\s+", " ");
         firstBrace = noNewlines.indexOf('{');
         lastBrace = noNewlines.lastIndexOf('}');

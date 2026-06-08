@@ -30,9 +30,6 @@ public class AiAnalysisRequest {
      */
     private boolean stream;
 
-    // JSON 응답을 강제하는 파라미터
-    private String format;
-
     // 온도를 0으로 설정하기 위한 옵션 객체
     private Map<String, Object> options;
 }
