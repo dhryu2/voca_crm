@@ -176,7 +176,7 @@ public class AuditLogController {
      * - MANAGER: 본인 + STAFF 로그만 조회 가능
      * - STAFF: 본인 로그만 조회 가능
      */
-    @GetMapping("/user/{userId}")
+    @GetMapping("/user/{targetUserId}")
     public ResponseEntity<?> getUserLogs(
             HttpServletRequest request,
             @PathVariable String targetUserId,
