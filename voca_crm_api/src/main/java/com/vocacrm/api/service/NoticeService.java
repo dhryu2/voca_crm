@@ -125,12 +125,12 @@ public class NoticeService {
         requireSystemAdmin(isSystemAdmin);
         Notice notice = getNoticeById(id);
 
-        notice.setTitle(noticeDetails.getTitle());
-        notice.setContent(noticeDetails.getContent());
-        notice.setStartDate(noticeDetails.getStartDate());
-        notice.setEndDate(noticeDetails.getEndDate());
-        notice.setPriority(noticeDetails.getPriority());
-        notice.setIsActive(noticeDetails.getIsActive());
+        if (noticeDetails.getTitle() != null) notice.setTitle(noticeDetails.getTitle());
+        if (noticeDetails.getContent() != null) notice.setContent(noticeDetails.getContent());
+        if (noticeDetails.getStartDate() != null) notice.setStartDate(noticeDetails.getStartDate());
+        if (noticeDetails.getEndDate() != null) notice.setEndDate(noticeDetails.getEndDate());
+        if (noticeDetails.getPriority() != null) notice.setPriority(noticeDetails.getPriority());
+        if (noticeDetails.getIsActive() != null) notice.setIsActive(noticeDetails.getIsActive());
 
         return noticeRepository.save(notice);
     }
