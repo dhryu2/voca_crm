@@ -87,17 +87,6 @@ public class WebConfig implements WebMvcConfigurer {
                 .allowedHeaders("Content-Type", "Authorization", "X-User-Id", "X-Business-Place-Id")
                 .allowCredentials(false)
                 .maxAge(3600);
-
-        // Swagger UI 및 API 문서용 CORS
-        registry.addMapping("/swagger-ui/**")
-                .allowedOrigins("http://localhost:8080", "http://127.0.0.1:8080")
-                .allowedMethods("GET")
-                .allowCredentials(false);
-
-        registry.addMapping("/v3/api-docs/**")
-                .allowedOrigins("http://localhost:8080", "http://127.0.0.1:8080")
-                .allowedMethods("GET")
-                .allowCredentials(false);
     }
 
     /**

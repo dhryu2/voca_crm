@@ -200,23 +200,6 @@ deepl:
 app:
   system-admin-ids: ${SYSTEM_ADMIN_IDS:admin}
 
-# OpenAPI/Swagger 설정
-# 주의: 운영 환경에서는 ENABLE_SWAGGER_UI=false로 설정하세요
-springdoc:
-  api-docs:
-    path: /v3/api-docs                   # OpenAPI JSON 경로
-    enabled: ${ENABLE_API_DOCS:false}    # 운영: false (기본값)
-  swagger-ui:
-    path: /swagger-ui.html               # Swagger UI 경로
-    enabled: ${ENABLE_SWAGGER_UI:false}  # 운영: false (기본값)
-    tags-sorter: alpha                   # 태그 알파벳순 정렬
-    operations-sorter: method            # HTTP 메서드순 정렬
-    display-request-duration: true       # 요청 소요 시간 표시
-    doc-expansion: none                  # 기본적으로 모든 태그 접힘
-  default-produces-media-type: application/json
-  default-consumes-media-type: application/json
-  packages-to-scan: com.vocacrm.api.controller  # 스캔 패키지
-  paths-to-match: /api/**                # 문서화할 API 경로
 
 # Actuator 엔드포인트 보안 설정
 management:

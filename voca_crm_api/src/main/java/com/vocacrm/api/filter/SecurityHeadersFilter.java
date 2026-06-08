@@ -60,9 +60,6 @@ public class SecurityHeadersFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        // Swagger UI와 API 문서는 필터 제외 (정적 리소스)
-        return path.startsWith("/swagger") ||
-               path.startsWith("/v3/api-docs") ||
-               path.startsWith("/actuator");
+        return path.startsWith("/actuator");
     }
 }

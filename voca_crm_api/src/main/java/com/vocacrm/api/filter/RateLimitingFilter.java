@@ -181,9 +181,7 @@ public class RateLimitingFilter extends OncePerRequestFilter {
      */
     private EndpointType determineEndpointType(String uri) {
         // Rate Limit 제외 대상
-        if (uri.startsWith("/actuator") ||
-            uri.startsWith("/swagger") ||
-            uri.startsWith("/v3/api-docs")) {
+        if (uri.startsWith("/actuator")) {
             return EndpointType.EXCLUDED;
         }
 

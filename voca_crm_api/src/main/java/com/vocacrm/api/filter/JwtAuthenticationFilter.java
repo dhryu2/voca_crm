@@ -44,9 +44,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
      * 인증이 필요 없는 경로 패턴 (prefix 매칭)
      */
     private static final List<String> PUBLIC_PATH_PREFIXES = Arrays.asList(
-            "/actuator",
-            "/swagger",
-            "/v3/api-docs"
+            "/actuator"
     );
 
     @Override
