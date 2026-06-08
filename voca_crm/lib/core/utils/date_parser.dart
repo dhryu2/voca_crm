@@ -7,6 +7,10 @@ class DateParser {
 
   /// 서버 응답 날짜 문자열을 로컬 DateTime으로 변환
   static DateTime fromServer(String dateStr) {
+    // 날짜만 있는 값(시간 미포함)은 UTC 보정 없이 그대로 파싱한다
+    if (!dateStr.contains('T')) {
+      return DateTime.parse(dateStr);
+    }
     if (!dateStr.endsWith('Z')) dateStr = '${dateStr}Z';
     return DateTime.parse(dateStr).toLocal();
   }
