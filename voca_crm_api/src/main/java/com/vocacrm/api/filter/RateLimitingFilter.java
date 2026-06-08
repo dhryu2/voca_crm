@@ -200,7 +200,7 @@ public class RateLimitingFilter extends OncePerRequestFilter {
             return EndpointType.SEARCH;
         }
 
-        // 음성 명령 AI 분석 (보수적 제한) - DeepL + AI 사용
+        // 음성 명령 AI 분석 (보수적 제한) - AI 서버 분석 호출
         if (uri.equals("/api/voice/command")) {
             return EndpointType.VOICE_AI;
         }

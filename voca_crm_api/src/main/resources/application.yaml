@@ -177,24 +177,15 @@ rate-limit:
     period-seconds: 60
 
 # AI 서버 설정 (Ollama)
-# 주의: 운영 환경에서는 반드시 HTTPS를 사용하세요
+# 외부 노출 시 reverse proxy(HTTPS) 또는 Tailscale 등 보안 네트워크 사용 권장
 ai:
   server:
-    url: ${AI_SERVER_URL:https://localhost:11434}  # 운영: HTTPS 필수
+    url: ${AI_SERVER_URL:http://localhost:11434}  # Ollama 기본 포트(HTTP)
     model: ${AI_MODEL_NAME:voca-crm}
     timeout: 30000                     # AI 서버 응답 타임아웃 (30초)
   daily-limit:
     enabled: true                      # 일일 제한 활성화
-    max-requests: 500                  # 일일 최대 AI 분석 요청 수
-                                       # DeepL 월 50만자 / 30일 / 평균 25자 ≈ 666회
-                                       # 안전 마진 고려하여 500회로 설정
-
-# DeepL 번역 API 설정
-# https://www.deepl.com/en/translator
-deepl:
-  api-key: ${DEEPL_API_KEY:}
-  api-url: ${DEEPL_API_URL:https://api-free.deepl.com/v2/translate}  # 무료: api-free, 유료: api
-  timeout: 10000                       # DeepL API 응답 타임아웃 (10초)
+    max-requests: 500                  # 일일 최대 AI 분석 요청 수 (로컬 AI 서버 부하 보호)
 
 # 시스템 관리자 설정
 app:

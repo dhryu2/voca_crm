@@ -31,7 +31,7 @@ public class VoiceCommandController {
      * Required Headers:
      * - Authorization: Bearer {JWT token}
      *
-     * Note: 이 엔드포인트는 AI 분석 + DeepL 번역을 사용하므로 보수적인 rate limiting 적용
+     * Note: 이 엔드포인트는 AI 서버 분석을 사용하므로 보수적인 rate limiting 적용
      *       대화 이어가기는 /continue 엔드포인트 사용
      */
     @PostMapping("/command")

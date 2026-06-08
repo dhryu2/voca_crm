@@ -40,7 +40,7 @@ public class RateLimitConfig {
 
     /**
      * 음성 명령 AI 분석 엔드포인트 제한 (/api/voice/command)
-     * DeepL + AI 사용으로 보수적 제한
+     * AI 서버 분석 호출이 무거우므로 보수적 제한
      * 기본값: 분당 5회
      */
     private EndpointLimit voiceAi = new EndpointLimit(5, 60);
