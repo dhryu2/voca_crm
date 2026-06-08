@@ -604,8 +604,21 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
       _isWaitingForNumberResponse = false;
     });
 
-    final memberData = response.data?['member'];
-    final memoData = response.data?['memo'];
+    var memberData = response.data?['member'];
+    var memoData = response.data?['memo'];
+
+    // 멀티액션 응답은 data['steps']에 단계별 결과가 담긴다.
+    // 마지막으로 회원 정보가 포함된 단계를 카드에 반영
+    if (memberData == null && response.data?['steps'] is List) {
+      final steps = response.data!['steps'] as List<dynamic>;
+      for (final step in steps) {
+        final stepData = (step as Map<String, dynamic>)['data'];
+        if (stepData is Map<String, dynamic> && stepData['member'] != null) {
+          memberData = stepData['member'];
+          memoData = stepData['memo'];
+        }
+      }
+    }
 
     if (memberData != null) {
       final member = Member.fromJson(memberData as Map<String, dynamic>);
