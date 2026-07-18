@@ -25,5 +25,9 @@ voca_crm_api/DEPLOYMENT.md
 # Firebase CLI config
 voca_crm/firebase.json
 
+# 로컬 문서/작업 폴더 (추적 안 함)
+docs/
+.omc/
+
 
 
