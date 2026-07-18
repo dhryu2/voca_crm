@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:voca_crm/core/session/activity_detector.dart';
 import 'package:voca_crm/core/session/session_config.dart';
 import 'package:voca_crm/core/session/session_manager.dart';
+import 'package:voca_crm/main.dart' show navigatorKey;
 import 'package:voca_crm/presentation/widgets/session_dialogs.dart';
 
 /// 세션 관리 래퍼 위젯
@@ -97,7 +98,7 @@ class _SessionWrapperState extends State<SessionWrapper> {
       case SessionState.expired:
         // 다이얼로그 닫기
         if (_isShowingDialog) {
-          Navigator.of(context).pop();
+          navigatorKey.currentState?.pop();
           _isShowingDialog = false;
         }
         break;
@@ -156,10 +157,14 @@ class _SessionWrapperState extends State<SessionWrapper> {
 
   void _showTimeoutWarning() {
     if (_isShowingDialog || _isLocked) return;
+    // SessionWrapper는 MaterialApp 위에 있어 자신의 context엔 Navigator가 없다.
+    // 다이얼로그는 앱 navigatorKey의 context로 띄운다(없으면 스킵해 크래시 방지).
+    final navContext = navigatorKey.currentContext;
+    if (navContext == null) return;
 
     _isShowingDialog = true;
     SessionTimeoutWarningDialog.show(
-      context,
+      navContext,
       onExtend: () {
         _isShowingDialog = false;
         SessionManager.instance.extendSession();
@@ -175,10 +180,12 @@ class _SessionWrapperState extends State<SessionWrapper> {
 
   void _showReauthDialog() {
     if (_isShowingDialog || _isLocked) return;
+    final navContext = navigatorKey.currentContext;
+    if (navContext == null) return;
 
     _isShowingDialog = true;
     ReauthenticationDialog.show(
-      context,
+      navContext,
       onSuccess: () {
         _isShowingDialog = false;
         // 세션 연장됨

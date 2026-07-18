@@ -225,7 +225,11 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
       _speechAvailable = await _speech.initialize(
         onStatus: (status) {
           if (!mounted) return;
-          if (status == 'done' && _currentState == VoiceState.listening) {
+          // 엔진이 세션을 닫으면 'notListening' 또는 'done'이 온다.
+          // listening 상태로 남아있으면 어느 쪽이든 UI를 ready로 동기화해
+          // "종료음은 났는데 UI는 인식중" 불일치를 막는다.
+          if ((status == 'done' || status == 'notListening') &&
+              _currentState == VoiceState.listening) {
             setState(() {
               _currentState = VoiceState.ready;
               _statusMessage = '음성 인식 완료';
@@ -243,20 +247,29 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
         },
         onError: (error) {
           if (!mounted) return;
-          setState(() {
-            _currentState = VoiceState.error;
-            _statusMessage = '음성 인식 오류';
-          });
           _stopAnimations();
 
           // 권한 관련 에러인지 확인
           if (error.errorMsg.contains('permission') ||
               error.errorMsg.contains('Permission')) {
+            setState(() {
+              _currentState = VoiceState.error;
+              _statusMessage = '음성 인식 오류';
+            });
             _showPermissionDeniedDialog();
-          } else if (_autoRestart) {
+            return;
+          }
+
+          // error_no_match / error_speech_timeout은 발화가 안 잡혔을 뿐인
+          // 일상적 에러 — error 화면에 가두지 않고 ready로 복귀시킨다.
+          setState(() {
+            _currentState = VoiceState.ready;
+            _statusMessage = '음성을 인식하지 못했습니다. 다시 말씀해주세요';
+          });
+
+          if (_autoRestart) {
             Future.delayed(const Duration(seconds: 2), () {
-              if (mounted) {
-                setState(() => _currentState = VoiceState.ready);
+              if (mounted && _currentState == VoiceState.ready) {
                 _startListening();
               }
             });
@@ -365,12 +378,14 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
           _processVoiceCommand(_recognizedText);
         }
       },
-      listenMode: stt.ListenMode.confirmation,
+      // confirmation 모드는 짧은 확답용이라 첫 어절에서 세션이 닫힘 —
+      // 문장형 명령을 받으려면 dictation 모드여야 한다.
+      listenMode: stt.ListenMode.dictation,
       localeId: 'ko_KR',
       cancelOnError: false,
       partialResults: true,
-      pauseFor: const Duration(seconds: 2),
-      listenFor: const Duration(seconds: 10),
+      pauseFor: const Duration(seconds: 3),
+      listenFor: const Duration(seconds: 30),
     );
   }
 

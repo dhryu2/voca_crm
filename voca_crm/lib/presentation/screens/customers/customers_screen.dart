@@ -10,9 +10,11 @@ import 'package:voca_crm/core/theme/theme_color.dart';
 import 'package:voca_crm/core/utils/message_handler.dart';
 import 'package:voca_crm/data/datasource/business_place_service.dart';
 import 'package:voca_crm/data/datasource/member_service.dart';
+import 'package:voca_crm/data/datasource/memo_service.dart';
 import 'package:voca_crm/data/datasource/user_service.dart';
 import 'package:voca_crm/data/datasource/visit_service.dart';
 import 'package:voca_crm/data/repository/member_repository_impl.dart';
+import 'package:voca_crm/data/repository/memo_repository_impl.dart';
 import 'package:voca_crm/data/repository/visit_repository_impl.dart';
 import 'package:voca_crm/domain/entity/visit.dart';
 import 'package:voca_crm/domain/entity/business_place_with_role.dart';
@@ -865,10 +867,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
                               height: screenHeight * 0.055,
                               child: OutlinedButton.icon(
                                 onPressed: () {
-                                  Navigator.pop(context);
-                                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                                    _showVisitHistoryDialog(member);
-                                  });
+                                  // 상세 팝업을 닫지 않고 그 위에 방문기록 팝업을 겹쳐 연다
+                                  _showVisitHistoryDialog(member);
                                 },
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: ThemeColor.success,
@@ -990,16 +990,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         height: screenHeight * 0.065,
                         child: ElevatedButton.icon(
                           onPressed: () {
-                            Navigator.pop(context);
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              // MainScreen의 Memo 탭으로 이동 (index 2)
-                              // MainScreen이 PageView를 사용하므로 상태를 변경해야 함
-                              // 현재는 간단하게 스낵바로 안내
-                              AppMessageHandler.showSuccessSnackBar(
-                                context,
-                                '메모 탭으로 이동하여 ${member.name}님의 메모를 작성하세요',
-                              );
-                            });
+                            // 상세 팝업 위에 메모 작성 다이얼로그를 바로 연다
+                            _showQuickMemoDialog(member);
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: ThemeColor.primary,
@@ -1946,6 +1938,93 @@ class _CustomersScreenState extends State<CustomersScreen> {
     }
   }
 
+  /// 회원 상세 팝업 위에서 바로 메모를 작성하는 다이얼로그
+  Future<void> _showQuickMemoDialog(Member member) async {
+    final contentController = TextEditingController();
+    final memoRepository = MemoRepositoryImpl(MemoService());
+    final screenWidth = MediaQuery.of(context).size.width;
+    bool isSaving = false;
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(screenWidth * 0.04),
+          ),
+          title: Text(
+            '${member.name}님 메모 작성',
+            style: TextStyle(
+              fontSize: screenWidth * 0.045,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: TextField(
+            controller: contentController,
+            autofocus: true,
+            maxLines: 5,
+            maxLength: 5000,
+            decoration: InputDecoration(
+              hintText: '메모 내용을 입력하세요',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(screenWidth * 0.02),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSaving ? null : () => Navigator.pop(dialogContext),
+              child: const Text('취소'),
+            ),
+            ElevatedButton(
+              onPressed: isSaving
+                  ? null
+                  : () async {
+                      final content = contentController.text.trim();
+                      if (content.isEmpty) {
+                        AppMessageHandler.showErrorSnackBar(
+                          context,
+                          '메모 내용을 입력해주세요',
+                        );
+                        return;
+                      }
+                      setDialogState(() => isSaving = true);
+                      try {
+                        await memoRepository.createMemo(
+                          memberId: member.id,
+                          content: content,
+                        );
+                        if (dialogContext.mounted) {
+                          Navigator.pop(dialogContext);
+                        }
+                        if (mounted) {
+                          AppMessageHandler.showSuccessSnackBar(
+                            context,
+                            '메모가 저장되었습니다',
+                          );
+                        }
+                      } catch (e) {
+                        setDialogState(() => isSaving = false);
+                        if (mounted) {
+                          AppMessageHandler.showErrorSnackBar(
+                            context,
+                            '메모 저장에 실패했습니다',
+                          );
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: ThemeColor.primary,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('저장'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _showVisitHistoryDialog(Member member) async {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -2665,7 +2744,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
           // Expanded Content
           AnimatedCrossFade(
-            firstChild: const SizedBox.shrink(),
+            // 접힘 애니메이션 중 secondChild가 폭 0 기준으로 재레이아웃되어
+            // 글자가 세로로 뭉치는 것을 막기 위해 폭을 유지한다
+            firstChild: const SizedBox(width: double.infinity),
             secondChild: _buildFilterContent(screenWidth, screenHeight),
             crossFadeState: _isFilterExpanded
                 ? CrossFadeState.showSecond

@@ -523,6 +523,12 @@ class AppMessageHandler {
       // JSON parsing failed, continue with fallback logic
     }
 
+    // 서비스 레이어가 서버의 사용자용 한국어 메시지를 이미 추출해 던진 경우
+    // (XxxServiceException.toString() == message) 범용 폴백으로 덮지 않고 그대로 보여준다
+    if (RegExp(r'[가-힣]').hasMatch(errorString)) {
+      return errorString;
+    }
+
     // JSON이 아닌 경우 직접 메시지 반환 (service에서 이미 추출한 경우)
     // "Failed to XXX: 메시지" 형식에서 메시지만 추출 시도하지 않고 그대로 반환
     // (service에서 이미 사용자 친화적 메시지로 변환됨)

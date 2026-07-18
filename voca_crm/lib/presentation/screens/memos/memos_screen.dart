@@ -988,13 +988,13 @@ class _MemosScreenState extends State<MemosScreen>
                                             ),
                                             child: Padding(
                                               padding: EdgeInsets.all(
-                                                screenWidth * 0.015,
+                                                screenWidth * 0.03,
                                               ),
                                               child: Icon(
                                                 memo.isImportant
                                                     ? Icons.star
                                                     : Icons.star_outline,
-                                                size: screenWidth * 0.045,
+                                                size: screenWidth * 0.055,
                                                 color: memo.isImportant
                                                     ? ThemeColor.warning
                                                     : ThemeColor.textSecondary,
@@ -1014,11 +1014,11 @@ class _MemosScreenState extends State<MemosScreen>
                                             ),
                                             child: Padding(
                                               padding: EdgeInsets.all(
-                                                screenWidth * 0.015,
+                                                screenWidth * 0.03,
                                               ),
                                               child: Icon(
                                                 Icons.edit_outlined,
-                                                size: screenWidth * 0.045,
+                                                size: screenWidth * 0.055,
                                                 color: ThemeColor.textSecondary,
                                               ),
                                             ),
@@ -1035,11 +1035,11 @@ class _MemosScreenState extends State<MemosScreen>
                                             ),
                                             child: Padding(
                                               padding: EdgeInsets.all(
-                                                screenWidth * 0.015,
+                                                screenWidth * 0.03,
                                               ),
                                               child: Icon(
                                                 Icons.delete_outline,
-                                                size: screenWidth * 0.045,
+                                                size: screenWidth * 0.055,
                                                 color: ThemeColor.error,
                                               ),
                                             ),
@@ -2412,7 +2412,9 @@ class _MemosScreenState extends State<MemosScreen>
 
           // Expanded Content
           AnimatedCrossFade(
-            firstChild: const SizedBox.shrink(),
+            // 접힘 애니메이션 중 secondChild가 폭 0 기준으로 재레이아웃되어
+            // 글자가 세로로 뭉치는 것을 막기 위해 폭을 유지한다
+            firstChild: const SizedBox(width: double.infinity),
             secondChild: _buildFilterContent(screenWidth, screenHeight),
             crossFadeState: _isFilterExpanded
                 ? CrossFadeState.showSecond

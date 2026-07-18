@@ -780,7 +780,12 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
           ? _buildErrorView()
-          : Column(
+          : RefreshIndicator(
+              onRefresh: _loadReservations,
+              color: ThemeColor.primary,
+              // 캘린더 포함 화면 전체가 스크롤되도록 Column 대신 ListView 사용
+              child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
               children: [
                 // Business Place Selector
                 _buildBusinessPlaceSelector(
@@ -869,58 +874,54 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                 ),
                 SizedBox(height: screenWidth * 0.03),
 
-                // Reservations list with Pull-to-Refresh
-                Expanded(
-                  child: RefreshIndicator(
-                    onRefresh: _loadReservations,
-                    color: ThemeColor.primary,
-                    child: _selectedDayReservations.isEmpty
-                        ? ListView(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            children: [
-                              SizedBox(
-                                height:
-                                    MediaQuery.of(context).size.height * 0.08,
-                              ),
-                              Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.event_busy,
-                                      size: screenWidth * 0.16,
-                                      color: ThemeColor.textTertiary,
-                                    ),
-                                    SizedBox(height: screenWidth * 0.04),
-                                    Text(
-                                      '예약이 없습니다',
-                                      style: TextStyle(
-                                        fontSize: screenWidth * 0.04,
-                                        color: ThemeColor.textSecondary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          )
-                        : ListView.separated(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            padding: EdgeInsets.symmetric(
-                              horizontal: screenWidth * 0.05,
-                            ),
-                            itemCount: _selectedDayReservations.length,
-                            separatorBuilder: (context, index) =>
-                                SizedBox(height: screenWidth * 0.02),
-                            itemBuilder: (context, index) {
-                              final reservation =
-                                  _selectedDayReservations[index];
-                              return _buildReservationCard(reservation);
-                            },
+                // Reservations list (바깥 ListView가 스크롤을 담당)
+                _selectedDayReservations.isEmpty
+                    ? Column(
+                        children: [
+                          SizedBox(
+                            height: MediaQuery.of(context).size.height * 0.08,
                           ),
-                  ),
-                ),
+                          Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.event_busy,
+                                  size: screenWidth * 0.16,
+                                  color: ThemeColor.textTertiary,
+                                ),
+                                SizedBox(height: screenWidth * 0.04),
+                                Text(
+                                  '예약이 없습니다',
+                                  style: TextStyle(
+                                    fontSize: screenWidth * 0.04,
+                                    color: ThemeColor.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: screenWidth * 0.05,
+                        ),
+                        itemCount: _selectedDayReservations.length,
+                        separatorBuilder: (context, index) =>
+                            SizedBox(height: screenWidth * 0.02),
+                        itemBuilder: (context, index) {
+                          final reservation =
+                              _selectedDayReservations[index];
+                          return _buildReservationCard(reservation);
+                        },
+                      ),
+                // FAB에 마지막 카드가 가리지 않도록 하단 여백
+                SizedBox(height: screenWidth * 0.22),
               ],
+              ),
             ),
       floatingActionButton: FloatingActionButton(
         heroTag: 'reservations_fab',
@@ -1010,7 +1011,10 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     return FutureBuilder<Member?>(
       future: _memberRepository.getMemberById(reservation.memberId),
       builder: (context, snapshot) {
-        final memberName = snapshot.data?.name ?? '로딩중...';
+        // 조회 실패(삭제된 회원 등)와 로딩 중을 구분해 표시
+        final memberName = snapshot.connectionState != ConnectionState.done
+            ? '로딩중...'
+            : (snapshot.data?.name ?? '(삭제된 회원)');
 
         return Card(
           child: ListTile(
