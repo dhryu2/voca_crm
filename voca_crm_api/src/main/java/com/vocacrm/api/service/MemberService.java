@@ -95,6 +95,26 @@ public class MemberService {
     }
 
     /**
+     * 회원 조회 (사용자 권한 체크 포함, 삭제 대기 회원 포함)
+     * 삭제된 회원의 과거 기록(방문 등) 조회처럼 삭제 여부와 무관하게
+     * 회원 정보가 필요한 경우 사용한다.
+     */
+    public Member getMemberByIdWithUserCheckIncludeDeleted(String memberId, String userId) {
+        Member member = getMemberByIdIncludeDeleted(memberId);
+
+        boolean hasAccess = userBusinessPlaceRepository
+                .existsByUserIdAndBusinessPlaceIdAndStatus(
+                        UUID.fromString(userId), member.getBusinessPlaceId(), AccessStatus.APPROVED
+                );
+
+        if (!hasAccess) {
+            throw new AccessDeniedException("해당 회원에 대한 접근 권한이 없습니다.");
+        }
+
+        return member;
+    }
+
+    /**
      * 사용자 ID로 접근 가능한 회원 조회 (페이징)
      */
     public Page<Member> getMembersByUserId(String userId, Pageable pageable) {
@@ -250,8 +270,8 @@ public class MemberService {
     public Member updateMemberWithPermission(String id, Member memberDetails, String requestUserId, String businessPlaceId) {
         Member member = getMemberById(id);
 
-        // 수정 권한 체크 (Ownership 기반)
-        checkPermissionForEdit(member.getOwnerId(), requestUserId, businessPlaceId);
+        // 수정 권한 체크 (회원 소속 사업장 기준 Ownership)
+        checkPermissionForEdit(member.getOwnerId(), requestUserId, member.getBusinessPlaceId());
 
         // 필드 업데이트
         member.setMemberNumber(memberDetails.getMemberNumber());
@@ -261,6 +281,7 @@ public class MemberService {
         if (memberDetails.getGrade() != null) {
             member.setGrade(memberDetails.getGrade());
         }
+        member.setRemark(memberDetails.getRemark());
         // 마지막 수정자 설정
         member.setLastModifiedById(UUID.fromString(requestUserId));
         return memberRepository.save(member);
@@ -279,7 +300,7 @@ public class MemberService {
     @Deprecated
     public void deleteMemberWithPermission(String id, String requestUserId, String businessPlaceId) {
         Member member = getMemberById(id);
-        checkPermissionForDelete(member.getOwnerId(), requestUserId, businessPlaceId);
+        checkPermissionForDelete(member.getOwnerId(), requestUserId, member.getBusinessPlaceId());
         memberRepository.deleteById(UUID.fromString(id));
     }
 
@@ -302,7 +323,7 @@ public class MemberService {
         }
 
         // 삭제 권한 체크 (Ownership 기반)
-        checkPermissionForDelete(member.getOwnerId(), requestUserId, businessPlaceId);
+        checkPermissionForDelete(member.getOwnerId(), requestUserId, member.getBusinessPlaceId());
 
         // 회원 soft delete 처리
         UUID requestUserUuid = UUID.fromString(requestUserId);
@@ -419,8 +440,8 @@ public class MemberService {
             throw new InvalidInputException("삭제 대기 상태가 아닌 회원입니다.");
         }
 
-        // MANAGER 이상만 복원 가능
-        checkManagerOrAbove(requestUserId, businessPlaceId, "복원");
+        // MANAGER 이상만 복원 가능 (회원 소속 사업장 기준)
+        checkManagerOrAbove(requestUserId, member.getBusinessPlaceId(), "복원");
 
         // 회원 복원
         member.setIsDeleted(false);
@@ -455,8 +476,8 @@ public class MemberService {
             throw new InvalidInputException("삭제 대기 상태인 회원만 영구 삭제할 수 있습니다.");
         }
 
-        // MANAGER 이상만 영구 삭제 가능
-        checkManagerOrAbove(requestUserId, businessPlaceId, "영구 삭제");
+        // MANAGER 이상만 영구 삭제 가능 (회원 소속 사업장 기준)
+        checkManagerOrAbove(requestUserId, member.getBusinessPlaceId(), "영구 삭제");
 
         // 메모는 CASCADE로 삭제됨
         memberRepository.deleteById(UUID.fromString(id));

@@ -2,8 +2,10 @@ package com.vocacrm.api.controller;
 
 import com.vocacrm.api.model.DeviceToken;
 import com.vocacrm.api.model.DeviceToken.DeviceType;
+import com.vocacrm.api.exception.AccessDeniedException;
 import com.vocacrm.api.model.NotificationLog;
 import com.vocacrm.api.repository.NotificationLogRepository;
+import com.vocacrm.api.service.AdminService;
 import com.vocacrm.api.service.PushNotificationService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -33,6 +35,7 @@ public class NotificationController {
 
     private final PushNotificationService pushNotificationService;
     private final NotificationLogRepository notificationLogRepository;
+    private final AdminService adminService;
 
     // ==================== 토큰 관리 API ====================
 
@@ -114,7 +117,15 @@ public class NotificationController {
      * 알림 읽음 처리
      */
     @PostMapping("/{notificationId}/read")
-    public ResponseEntity<Void> markAsRead(@PathVariable String notificationId) {
+    public ResponseEntity<Void> markAsRead(
+            @PathVariable String notificationId,
+            jakarta.servlet.http.HttpServletRequest servletRequest) {
+        String userId = (String) servletRequest.getAttribute("userId");
+        NotificationLog notification = notificationLogRepository.findById(UUID.fromString(notificationId))
+                .orElseThrow(() -> new AccessDeniedException("알림을 찾을 수 없습니다."));
+        if (!notification.getUserId().equals(UUID.fromString(userId))) {
+            throw new AccessDeniedException("해당 알림에 대한 접근 권한이 없습니다.");
+        }
         pushNotificationService.markAsRead(notificationId);
         return ResponseEntity.ok().build();
     }
@@ -135,7 +146,12 @@ public class NotificationController {
      * 테스트 알림 발송
      */
     @PostMapping("/test")
-    public ResponseEntity<Map<String, String>> sendTestNotification(@Valid @RequestBody TestNotificationRequest request) {
+    public ResponseEntity<Map<String, String>> sendTestNotification(
+            @Valid @RequestBody TestNotificationRequest request,
+            jakarta.servlet.http.HttpServletRequest servletRequest) {
+        Boolean isSystemAdmin = (Boolean) servletRequest.getAttribute("isSystemAdmin");
+        adminService.validateSystemAdmin(isSystemAdmin);
+
         pushNotificationService.sendToUser(
                 request.userId(),
                 NotificationLog.NotificationType.SYSTEM_ANNOUNCEMENT,

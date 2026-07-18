@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -147,6 +148,21 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * MissingRequestHeaderException 처리
+     * 필수 요청 헤더 누락 시 발생
+     * HTTP 400 BAD_REQUEST 응답
+     */
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    public ResponseEntity<ErrorResponse> handleMissingHeader(MissingRequestHeaderException ex) {
+        log.warn("Missing header: {}", ex.getHeaderName());
+        ErrorResponse error = new ErrorResponse(
+            "필수 헤더가 누락되었습니다: " + ex.getHeaderName(),
+            HttpStatus.BAD_REQUEST.value()
+        );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
+    /**
      * MethodArgumentTypeMismatchException 처리
      * 요청 파라미터 타입 불일치 시 발생
      * HTTP 400 BAD_REQUEST 응답
@@ -203,6 +219,21 @@ public class GlobalExceptionHandler {
         log.warn("Access denied: {}", ex.getMessage());
         ErrorResponse error = new ErrorResponse(
             ex.getMessage(),
+            HttpStatus.FORBIDDEN.value()
+        );
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+    }
+
+    /**
+     * SecurityException 처리
+     * 일부 서비스(예: NoticeService의 시스템 관리자 검증)가 던지는 권한 거부
+     * HTTP 403 FORBIDDEN 응답 (매핑 부재 시 500으로 새는 문제 방지)
+     */
+    @ExceptionHandler(SecurityException.class)
+    public ResponseEntity<ErrorResponse> handleSecurityException(SecurityException ex) {
+        log.warn("Security exception: {}", ex.getMessage());
+        ErrorResponse error = new ErrorResponse(
+            ex.getMessage() != null ? ex.getMessage() : "접근 권한이 없습니다.",
             HttpStatus.FORBIDDEN.value()
         );
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);

@@ -7,6 +7,7 @@ import com.vocacrm.api.model.AccessStatus;
 import com.vocacrm.api.model.Member;
 import com.vocacrm.api.model.Memo;
 import com.vocacrm.api.repository.UserBusinessPlaceRepository;
+import com.vocacrm.api.service.AccessControlService;
 import com.vocacrm.api.service.MemberService;
 import com.vocacrm.api.service.MemoService;
 import jakarta.validation.Valid;
@@ -50,6 +51,7 @@ public class MemoController {
     private final MemoService memoService;
     private final MemberService memberService;
     private final UserBusinessPlaceRepository userBusinessPlaceRepository;
+    private final AccessControlService accessControlService;
 
     /**
      * ID로 특정 메모 조회
@@ -85,10 +87,10 @@ public class MemoController {
     public ResponseEntity<Memo> getMemoById(
             @PathVariable String id,
             jakarta.servlet.http.HttpServletRequest servletRequest) {
-        String businessPlaceId = (String) servletRequest.getAttribute("defaultBusinessPlaceId");
+        String userId = (String) servletRequest.getAttribute("userId");
 
-        // 사업장 권한 검증 포함하여 메모 조회
-        Memo memo = memoService.getMemoById(id, businessPlaceId);
+        // 사업장 권한 검증 포함하여 메모 조회 (메모의 실소속 사업장 기준)
+        Memo memo = memoService.getMemoByIdForUser(id, userId);
 
         return ResponseEntity.ok(memo);
     }
@@ -285,15 +287,20 @@ public class MemoController {
         // JWT에서 userId 추출하여 ownerId로 사용
         String userId = (String) servletRequest.getAttribute("userId");
 
+        // 요청자가 메모가 속할 회원의 사업장에 APPROVED 멤버십을 가지는지 검증
+        if (request.getMemberId() != null) {
+            accessControlService.requireApprovedMembership(
+                    userId, accessControlService.businessPlaceOfMember(request.getMemberId()));
+        }
+
         Memo memo = new Memo();
         if (request.getMemberId() != null) {
             memo.setMemberId(UUID.fromString(request.getMemberId()));
         }
         memo.setContent(request.getContent());
-        // ownerId가 요청에 있으면 사용, 없으면 JWT userId 사용
-        String ownerIdStr = request.getOwnerId() != null ? request.getOwnerId() : userId;
-        if (ownerIdStr != null) {
-            memo.setOwnerId(UUID.fromString(ownerIdStr));
+        // ownerId는 위조 방지를 위해 항상 JWT userId 사용 (클라이언트 지정 ownerId는 무시)
+        if (userId != null) {
+            memo.setOwnerId(UUID.fromString(userId));
         }
         if (request.getIsImportant() != null) {
             memo.setIsImportant(request.getIsImportant());
@@ -324,21 +331,26 @@ public class MemoController {
         // JWT에서 userId 추출하여 ownerId로 사용
         String userId = (String) servletRequest.getAttribute("userId");
 
+        // 요청자가 메모가 속할 회원의 사업장에 APPROVED 멤버십을 가지는지 검증
+        if (request.getMemberId() != null) {
+            accessControlService.requireApprovedMembership(
+                    userId, accessControlService.businessPlaceOfMember(request.getMemberId()));
+        }
+
         Memo memo = new Memo();
         if (request.getMemberId() != null) {
             memo.setMemberId(UUID.fromString(request.getMemberId()));
         }
         memo.setContent(request.getContent());
-        // ownerId가 요청에 있으면 사용, 없으면 JWT userId 사용
-        String ownerIdStr = request.getOwnerId() != null ? request.getOwnerId() : userId;
-        if (ownerIdStr != null) {
-            memo.setOwnerId(UUID.fromString(ownerIdStr));
+        // ownerId는 위조 방지를 위해 항상 JWT userId 사용 (클라이언트 지정 ownerId는 무시)
+        if (userId != null) {
+            memo.setOwnerId(UUID.fromString(userId));
         }
         if (request.getIsImportant() != null) {
             memo.setIsImportant(request.getIsImportant());
         }
 
-        Memo created = memoService.createMemoWithOldestDeletion(memo);
+        Memo created = memoService.createMemoWithOldestDeletion(memo, userId);
         return ResponseEntity.ok(created);
     }
 
@@ -660,12 +672,10 @@ public class MemoController {
             jakarta.servlet.http.HttpServletRequest servletRequest) {
 
         // JWT에서 추출한 사용자 정보 가져오기
+        // 사업장 판정은 서비스에서 메모가 실제 속한 사업장 기준으로 수행
         String requestUserId = (String) servletRequest.getAttribute("userId");
-        String businessPlaceId = (String) servletRequest.getAttribute("defaultBusinessPlaceId");
 
-        Memo memo = memoService.getMemoById(id, businessPlaceId);
-        memo.setIsImportant(!memo.getIsImportant());
-        Memo updated = memoService.updateMemoWithPermission(id, memo, requestUserId, businessPlaceId);
+        Memo updated = memoService.toggleImportant(id, requestUserId);
         return ResponseEntity.ok(updated);
     }
 

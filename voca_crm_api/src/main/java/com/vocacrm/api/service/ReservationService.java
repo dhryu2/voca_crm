@@ -1,5 +1,6 @@
 package com.vocacrm.api.service;
 
+import com.vocacrm.api.exception.ResourceNotFoundException;
 import com.vocacrm.api.model.Reservation;
 import com.vocacrm.api.repository.ReservationRepository;
 import lombok.RequiredArgsConstructor;
@@ -124,7 +125,7 @@ public class ReservationService {
      */
     public Reservation getReservationById(UUID id) {
         return reservationRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("예약을 찾을 수 없습니다: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("예약을 찾을 수 없습니다: " + id));
     }
 
     /**
@@ -213,6 +214,7 @@ public class ReservationService {
             existing.setReservationTime(updatedReservation.getReservationTime());
         }
         if (updatedReservation.getStatus() != null) {
+            validateStatusTransition(existing.getStatus(), updatedReservation.getStatus());
             existing.setStatus(updatedReservation.getStatus());
         }
         if (updatedReservation.getServiceType() != null) {
@@ -224,8 +226,9 @@ public class ReservationService {
         if (updatedReservation.getNotes() != null) {
             existing.setNotes(updatedReservation.getNotes());
         }
-        // remark는 null로 설정 가능 (특이사항 삭제)
-        existing.setRemark(updatedReservation.getRemark());
+        if (updatedReservation.getRemark() != null) {
+            existing.setRemark(updatedReservation.getRemark());
+        }
         if (updatedReservation.getUpdatedBy() != null) {
             existing.setUpdatedBy(updatedReservation.getUpdatedBy());
         }
@@ -240,11 +243,30 @@ public class ReservationService {
     @Transactional
     public Reservation updateReservationStatus(UUID id, Reservation.ReservationStatus status, UUID updatedBy) {
         Reservation reservation = getReservationById(id);
+        validateStatusTransition(reservation.getStatus(), status);
         reservation.setStatus(status);
         if (updatedBy != null) {
             reservation.setUpdatedBy(updatedBy);
         }
         return reservationRepository.save(reservation);
+    }
+
+    /**
+     * 예약 상태 전이 검증
+     *
+     * 종료 상태(COMPLETED, CANCELLED, NO_SHOW)에서 활성 상태(PENDING, CONFIRMED)로의
+     * 역행은 허용하지 않는다.
+     */
+    private void validateStatusTransition(Reservation.ReservationStatus currentStatus, Reservation.ReservationStatus newStatus) {
+        boolean currentIsFinal = currentStatus == Reservation.ReservationStatus.COMPLETED
+                || currentStatus == Reservation.ReservationStatus.CANCELLED
+                || currentStatus == Reservation.ReservationStatus.NO_SHOW;
+        boolean newIsActive = newStatus == Reservation.ReservationStatus.PENDING
+                || newStatus == Reservation.ReservationStatus.CONFIRMED;
+
+        if (currentIsFinal && newIsActive) {
+            throw new IllegalArgumentException("이미 종료된 예약은 상태를 변경할 수 없습니다");
+        }
     }
 
     // ===== 예약 삭제 정책 =====

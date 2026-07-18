@@ -34,6 +34,7 @@ public class MemoService {
     private final MemberRepository memberRepository;
     private final UserBusinessPlaceRepository userBusinessPlaceRepository;
     private final UserRepository userRepository;
+    private final AccessControlService accessControlService;
 
     /**
      * 메모 ID로 조회 (사업장 권한 검증 포함)
@@ -160,15 +161,18 @@ public class MemoService {
     }
 
     @Transactional
-    public Memo createMemoWithOldestDeletion(Memo memo) {
+    public Memo createMemoWithOldestDeletion(Memo memo, String requestUserId) {
         // Get member to check business place
         Member member = memberRepository.findById(memo.getMemberId())
                 .orElseThrow(() -> new ResourceNotFoundException("회원을 찾을 수 없습니다"));
 
         // N+1 최적화: 가장 오래된 메모만 직접 조회 (기존: 모든 메모 조회 후 마지막 요소 삭제)
-        // Delete oldest memo first (삭제되지 않은 메모 중)
+        // Delete oldest memo first (삭제되지 않은 메모 중) - 삭제 권한 체크 후 삭제
         memoRepository.findOldestByMemberIdAndBusinessPlaceId(memo.getMemberId(), member.getBusinessPlaceId())
-                .ifPresent(memoRepository::delete);
+                .ifPresent(oldest -> {
+                    checkPermissionForDelete(oldest.getOwnerId(), requestUserId, member.getBusinessPlaceId());
+                    memoRepository.delete(oldest);
+                });
 
         // Then create new memo
         return createMemo(memo);
@@ -205,15 +209,71 @@ public class MemoService {
      */
     @Transactional
     public Memo updateMemoWithPermission(String id, Memo memoDetails, String requestUserId, String businessPlaceId) {
-        Memo memo = getMemoById(id, businessPlaceId);
+        // 메모가 속한 사업장 기준으로 요청자 접근 권한 확인
+        Memo memo = getMemoByIdForUser(id, requestUserId);
+        String actualBusinessPlaceId = resolveBusinessPlaceId(memo);
 
         // 수정 권한 체크 (Ownership 기반)
-        checkPermissionForEdit(memo.getOwnerId(), requestUserId, businessPlaceId);
+        checkPermissionForEdit(memo.getOwnerId(), requestUserId, actualBusinessPlaceId);
 
         // 필드 업데이트
         memo.setContent(memoDetails.getContent());
+        if (memoDetails.getIsImportant() != null) {
+            memo.setIsImportant(memoDetails.getIsImportant());
+        }
         memo.setLastModifiedById(UUID.fromString(requestUserId));
         return memoRepository.save(memo);
+    }
+
+    /**
+     * 중요 메모 토글 (단일 트랜잭션)
+     * 사업장 판정은 메모가 실제 속한 사업장 기준으로 요청자 권한을 확인한다.
+     */
+    @Transactional
+    public Memo toggleImportant(String id, String requestUserId) {
+        Memo memo = getMemoByIdForUser(id, requestUserId);
+        String actualBusinessPlaceId = resolveBusinessPlaceId(memo);
+
+        checkPermissionForEdit(memo.getOwnerId(), requestUserId, actualBusinessPlaceId);
+
+        memo.setIsImportant(!Boolean.TRUE.equals(memo.getIsImportant()));
+        memo.setLastModifiedById(UUID.fromString(requestUserId));
+        return memoRepository.save(memo);
+    }
+
+    /**
+     * 메모 ID로 조회 (요청 사용자의 사업장 접근 권한 기반 검증)
+     * JWT defaultBusinessPlaceId 대신 메모가 속한 사업장에 대한
+     * 사용자의 APPROVED 멤버십으로 접근을 판정한다.
+     */
+    public Memo getMemoByIdForUser(String id, String requestUserId) {
+        if (requestUserId == null || requestUserId.isEmpty()) {
+            throw new IllegalArgumentException("userId는 필수입니다");
+        }
+
+        Memo memo = memoRepository.findById(UUID.fromString(id))
+                .orElseThrow(() -> new ResourceNotFoundException("메모를 찾을 수 없습니다: " + id));
+
+        if (Boolean.TRUE.equals(memo.getIsDeleted())) {
+            throw new ResourceNotFoundException("삭제된 메모입니다: " + id);
+        }
+
+        boolean hasAccess = userBusinessPlaceRepository.existsByUserIdAndBusinessPlaceIdAndStatus(
+                UUID.fromString(requestUserId), resolveBusinessPlaceId(memo), AccessStatus.APPROVED);
+        if (!hasAccess) {
+            throw new AccessDeniedException("해당 사업장의 메모가 아닙니다");
+        }
+
+        return memo;
+    }
+
+    /**
+     * 메모가 실제 속한 사업장 ID (memo → member → businessPlaceId)
+     */
+    private String resolveBusinessPlaceId(Memo memo) {
+        Member member = memberRepository.findById(memo.getMemberId())
+                .orElseThrow(() -> new ResourceNotFoundException("회원을 찾을 수 없습니다"));
+        return member.getBusinessPlaceId();
     }
 
     @Transactional
@@ -228,8 +288,12 @@ public class MemoService {
     @Transactional
     @Deprecated
     public void deleteMemoWithPermission(String id, String requestUserId, String businessPlaceId) {
-        Memo memo = getMemoById(id, businessPlaceId);
-        checkPermissionForDelete(memo.getOwnerId(), requestUserId, businessPlaceId);
+        Memo memo = getMemoByIdIncludeDeleted(id);
+        if (Boolean.TRUE.equals(memo.getIsDeleted())) {
+            throw new ResourceNotFoundException("삭제된 메모입니다: " + id);
+        }
+        String actualBusinessPlaceId = accessControlService.businessPlaceOfMemo(id);
+        checkPermissionForDelete(memo.getOwnerId(), requestUserId, actualBusinessPlaceId);
         memoRepository.deleteById(UUID.fromString(id));
     }
 
@@ -251,8 +315,9 @@ public class MemoService {
             throw new InvalidInputException("이미 삭제 대기 중인 메모입니다.");
         }
 
-        // 삭제 권한 체크 (Ownership 기반)
-        checkPermissionForDelete(memo.getOwnerId(), requestUserId, businessPlaceId);
+        // 삭제 권한 체크 (Ownership 기반) - 사업장 판정은 메모의 실소속 사업장 기준
+        String actualBusinessPlaceId = accessControlService.businessPlaceOfMemo(id);
+        checkPermissionForDelete(memo.getOwnerId(), requestUserId, actualBusinessPlaceId);
 
         // 메모 soft delete 처리
         memo.setIsDeleted(true);
@@ -327,8 +392,9 @@ public class MemoService {
             throw new InvalidInputException("삭제 대기 상태가 아닌 메모입니다.");
         }
 
-        // MANAGER 이상만 복원 가능
-        checkManagerOrAbove(requestUserId, businessPlaceId, "복원");
+        // MANAGER 이상만 복원 가능 - 사업장 판정은 메모의 실소속 사업장 기준
+        String actualBusinessPlaceId = accessControlService.businessPlaceOfMemo(id);
+        checkManagerOrAbove(requestUserId, actualBusinessPlaceId, "복원");
 
         // 회원 상태 확인 - 회원이 삭제 대기 중이면 메모 복원 불가
         Member member = memberRepository.findById(memo.getMemberId())
@@ -358,8 +424,9 @@ public class MemoService {
             throw new InvalidInputException("삭제 대기 상태인 메모만 영구 삭제할 수 있습니다.");
         }
 
-        // MANAGER 이상만 영구 삭제 가능
-        checkManagerOrAbove(requestUserId, businessPlaceId, "영구 삭제");
+        // MANAGER 이상만 영구 삭제 가능 - 사업장 판정은 메모의 실소속 사업장 기준
+        String actualBusinessPlaceId = accessControlService.businessPlaceOfMemo(id);
+        checkManagerOrAbove(requestUserId, actualBusinessPlaceId, "영구 삭제");
 
         memoRepository.deleteById(UUID.fromString(id));
     }

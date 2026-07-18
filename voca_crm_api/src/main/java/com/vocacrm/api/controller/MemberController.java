@@ -51,6 +51,7 @@ public class MemberController {
      * final로 선언하여 불변성 보장 및 생성자 주입 활성화
      */
     private final MemberService memberService;
+    private final com.vocacrm.api.service.AccessControlService accessControlService;
 
     /**
      * 전체 회원 목록 조회 (페이징)
@@ -153,7 +154,9 @@ public class MemberController {
     public ResponseEntity<java.util.Map<String, Object>> getMembersByNumber(
             @PathVariable String number,
             jakarta.servlet.http.HttpServletRequest servletRequest) {
-        String businessPlaceId = (String) servletRequest.getAttribute("defaultBusinessPlaceId");
+        String userId = (String) servletRequest.getAttribute("userId");
+        String businessPlaceId = accessControlService.currentDefaultBusinessPlace(userId);
+        accessControlService.requireApprovedMembership(userId, businessPlaceId);
         List<Member> members = memberService.getMembersByNumber(number, businessPlaceId);
         return ResponseEntity.ok(java.util.Map.of("data", members));
     }
@@ -239,7 +242,9 @@ public class MemberController {
             @RequestParam(required = false) String phone,
             @RequestParam(required = false) String email,
             jakarta.servlet.http.HttpServletRequest servletRequest) {
-        String businessPlaceId = (String) servletRequest.getAttribute("defaultBusinessPlaceId");
+        String userId = (String) servletRequest.getAttribute("userId");
+        String businessPlaceId = accessControlService.currentDefaultBusinessPlace(userId);
+        accessControlService.requireApprovedMembership(userId, businessPlaceId);
         List<Member> members = memberService.searchMembers(memberNumber, name, phone, email, businessPlaceId);
         return ResponseEntity.ok(java.util.Map.of("data", members));
     }
@@ -276,16 +281,21 @@ public class MemberController {
      * @return 생성된 회원 정보 (ID와 타임스탬프 포함, HTTP 200 OK)
      */
     @PostMapping
-    public ResponseEntity<Member> createMember(@Valid @RequestBody MemberCreateRequest request) {
+    public ResponseEntity<Member> createMember(
+            @Valid @RequestBody MemberCreateRequest request,
+            jakarta.servlet.http.HttpServletRequest servletRequest) {
+        // 요청자가 대상 사업장에 APPROVED 멤버십이 있는지 검증 (테넌트 격리)
+        String userId = (String) servletRequest.getAttribute("userId");
+        accessControlService.requireApprovedMembership(userId, request.getBusinessPlaceId());
+
         Member member = new Member();
         member.setMemberNumber(request.getMemberNumber());
         member.setName(request.getName());
         member.setPhone(request.getPhone());
         member.setEmail(request.getEmail());
         member.setBusinessPlaceId(request.getBusinessPlaceId());
-        if (request.getOwnerId() != null) {
-            member.setOwnerId(UUID.fromString(request.getOwnerId()));
-        }
+        // 레코드 소유자는 클라이언트 값이 아니라 요청자(JWT userId)로 고정 (위조 방지)
+        member.setOwnerId(UUID.fromString(userId));
         member.setGrade(request.getGrade());
         member.setRemark(request.getRemark());
 
@@ -408,8 +418,7 @@ public class MemberController {
      * - id: 삭제할 회원의 UUID
      *
      * Required Headers:
-     * - X-User-Id: 요청자 사용자 ID
-     * - X-Business-Place-Id: 사업장 ID
+     * - Authorization: Bearer {JWT token}
      *
      * 권한 규칙:
      * - 삭제 권한은 수정자 기준 (수정자 없으면 생성자 기준)
@@ -421,17 +430,17 @@ public class MemberController {
      * - 회원 삭제 시 해당 회원의 모든 메모도 함께 soft delete 처리됩니다
      *
      * @param id 삭제할 회원의 UUID
-     * @param requestUserId 요청자 사용자 ID
-     * @param businessPlaceId 사업장 ID
+     * @param servletRequest HttpServletRequest (JWT에서 추출한 정보 포함)
      * @return 삭제된 회원 정보 (HTTP 200 OK)
      */
     @DeleteMapping("/{id}/soft")
     public ResponseEntity<Member> softDeleteMember(
             @PathVariable String id,
-            @RequestHeader("X-User-Id") String requestUserId,
-            @RequestHeader("X-Business-Place-Id") String businessPlaceId) {
+            @RequestHeader(value = "X-Business-Place-Id", required = false) String businessPlaceId,
+            jakarta.servlet.http.HttpServletRequest servletRequest) {
 
-        Member deleted = memberService.softDeleteMember(id, requestUserId, businessPlaceId);
+        String requestUserId = (String) servletRequest.getAttribute("userId");
+        Member deleted = memberService.softDeleteMember(id, requestUserId, "");
         return ResponseEntity.ok(deleted);
     }
 
@@ -487,8 +496,7 @@ public class MemberController {
      * - id: 복원할 회원의 UUID
      *
      * Required Headers:
-     * - X-User-Id: 요청자 사용자 ID
-     * - X-Business-Place-Id: 사업장 ID
+     * - Authorization: Bearer {JWT token}
      *
      * 권한: MANAGER 이상만 복원 가능
      *
@@ -496,17 +504,17 @@ public class MemberController {
      * - 회원 복원 시 해당 회원의 모든 메모도 함께 복원됩니다
      *
      * @param id 복원할 회원의 UUID
-     * @param requestUserId 요청자 사용자 ID
-     * @param businessPlaceId 사업장 ID
+     * @param servletRequest HttpServletRequest (JWT에서 추출한 정보 포함)
      * @return 복원된 회원 정보 (HTTP 200 OK)
      */
     @PostMapping("/{id}/restore")
     public ResponseEntity<Member> restoreMember(
             @PathVariable String id,
-            @RequestHeader("X-User-Id") String requestUserId,
-            @RequestHeader("X-Business-Place-Id") String businessPlaceId) {
+            @RequestHeader(value = "X-Business-Place-Id", required = false) String businessPlaceId,
+            jakarta.servlet.http.HttpServletRequest servletRequest) {
 
-        Member restored = memberService.restoreMember(id, requestUserId, businessPlaceId);
+        String requestUserId = (String) servletRequest.getAttribute("userId");
+        Member restored = memberService.restoreMember(id, requestUserId, "");
         return ResponseEntity.ok(restored);
     }
 
@@ -520,8 +528,7 @@ public class MemberController {
      * - id: 영구 삭제할 회원의 UUID
      *
      * Required Headers:
-     * - X-User-Id: 요청자 사용자 ID
-     * - X-Business-Place-Id: 사업장 ID
+     * - Authorization: Bearer {JWT token}
      *
      * 권한: MANAGER 이상만 영구 삭제 가능
      *
@@ -531,17 +538,17 @@ public class MemberController {
      * - 연관된 메모도 함께 영구 삭제됩니다
      *
      * @param id 영구 삭제할 회원의 UUID
-     * @param requestUserId 요청자 사용자 ID
-     * @param businessPlaceId 사업장 ID
+     * @param servletRequest HttpServletRequest (JWT에서 추출한 정보 포함)
      * @return 응답 본문 없음 (HTTP 204 No Content)
      */
     @DeleteMapping("/{id}/permanent")
     public ResponseEntity<Void> permanentDeleteMember(
             @PathVariable String id,
-            @RequestHeader("X-User-Id") String requestUserId,
-            @RequestHeader("X-Business-Place-Id") String businessPlaceId) {
+            @RequestHeader(value = "X-Business-Place-Id", required = false) String businessPlaceId,
+            jakarta.servlet.http.HttpServletRequest servletRequest) {
 
-        memberService.permanentDeleteMember(id, requestUserId, businessPlaceId);
+        String requestUserId = (String) servletRequest.getAttribute("userId");
+        memberService.permanentDeleteMember(id, requestUserId, "");
         return ResponseEntity.noContent().build();
     }
 }

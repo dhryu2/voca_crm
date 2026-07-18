@@ -2,6 +2,7 @@ package com.vocacrm.api.controller;
 
 import com.vocacrm.api.model.ErrorLog;
 import com.vocacrm.api.model.ErrorLog.ErrorSeverity;
+import com.vocacrm.api.service.AdminService;
 import com.vocacrm.api.service.ErrorLogService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -32,6 +33,7 @@ import java.util.UUID;
 public class ErrorLogController {
 
     private final ErrorLogService errorLogService;
+    private final AdminService adminService;
 
     // ==================== 오류 로그 수집 (클라이언트용) ====================
 
@@ -87,7 +89,7 @@ public class ErrorLogController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             HttpServletRequest servletRequest) {
-        // TODO: 관리자 권한 확인 로직 추가
+        validateSystemAdmin(servletRequest);
         return ResponseEntity.ok(errorLogService.getAllLogs(page, size));
     }
 
@@ -99,6 +101,7 @@ public class ErrorLogController {
     public ResponseEntity<ErrorLog> getLogById(
             @PathVariable String id,
             HttpServletRequest servletRequest) {
+        validateSystemAdmin(servletRequest);
         return ResponseEntity.ok(errorLogService.getLogById(id));
     }
 
@@ -112,6 +115,7 @@ public class ErrorLogController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             HttpServletRequest servletRequest) {
+        validateSystemAdmin(servletRequest);
         return ResponseEntity.ok(errorLogService.getLogsByBusinessPlace(businessPlaceId, page, size));
     }
 
@@ -124,6 +128,7 @@ public class ErrorLogController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             HttpServletRequest servletRequest) {
+        validateSystemAdmin(servletRequest);
         return ResponseEntity.ok(errorLogService.getUnresolvedLogs(page, size));
     }
 
@@ -141,6 +146,7 @@ public class ErrorLogController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             HttpServletRequest servletRequest) {
+        validateSystemAdmin(servletRequest);
 
         Page<ErrorLog> logs;
         if (businessPlaceId != null && !businessPlaceId.isEmpty()) {
@@ -163,6 +169,7 @@ public class ErrorLogController {
             @PathVariable String id,
             @Valid @RequestBody ResolveRequest request,
             HttpServletRequest servletRequest) {
+        validateSystemAdmin(servletRequest);
         String resolvedBy = (String) servletRequest.getAttribute("userId");
         return ResponseEntity.ok(
                 errorLogService.resolveError(id, resolvedBy, request.getResolutionNote()));
@@ -176,6 +183,7 @@ public class ErrorLogController {
     public ResponseEntity<ErrorLog> unresolveError(
             @PathVariable String id,
             HttpServletRequest servletRequest) {
+        validateSystemAdmin(servletRequest);
         return ResponseEntity.ok(errorLogService.unresolveError(id));
     }
 
@@ -189,6 +197,7 @@ public class ErrorLogController {
     public ResponseEntity<Map<String, Object>> getErrorSummary(
             @RequestParam(defaultValue = "7") int days,
             HttpServletRequest servletRequest) {
+        validateSystemAdmin(servletRequest);
         return ResponseEntity.ok(errorLogService.getErrorSummary(days));
     }
 
@@ -200,6 +209,7 @@ public class ErrorLogController {
     public ResponseEntity<Map<String, Long>> getUnresolvedCount(
             @RequestParam(required = false) String businessPlaceId,
             HttpServletRequest servletRequest) {
+        validateSystemAdmin(servletRequest);
         long count;
         if (businessPlaceId != null && !businessPlaceId.isEmpty()) {
             count = errorLogService.getUnresolvedCountByBusinessPlace(businessPlaceId);
@@ -210,6 +220,14 @@ public class ErrorLogController {
     }
 
     // ==================== 헬퍼 메서드 ====================
+
+    /**
+     * 시스템 관리자 권한 검증
+     */
+    private void validateSystemAdmin(HttpServletRequest servletRequest) {
+        Boolean isSystemAdmin = (Boolean) servletRequest.getAttribute("isSystemAdmin");
+        adminService.validateSystemAdmin(isSystemAdmin);
+    }
 
     /**
      * 요청 본문에서 민감 정보 제거

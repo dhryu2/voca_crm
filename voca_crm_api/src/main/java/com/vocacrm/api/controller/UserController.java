@@ -5,6 +5,7 @@ import com.vocacrm.api.exception.AccessDeniedException;
 import com.vocacrm.api.exception.ResourceNotFoundException;
 import com.vocacrm.api.model.User;
 import com.vocacrm.api.repository.UserRepository;
+import com.vocacrm.api.service.AccessControlService;
 import com.vocacrm.api.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -21,6 +22,7 @@ public class UserController {
 
     private final UserRepository userRepository;
     private final UserService userService;
+    private final AccessControlService accessControlService;
 
     @GetMapping("/{id}")
     public ResponseEntity<User> getUser(@PathVariable String id, HttpServletRequest servletRequest) {
@@ -100,6 +102,9 @@ public class UserController {
         if (!id.equals(requestUserId)) {
             throw new AccessDeniedException("본인의 정보만 수정할 수 있습니다.");
         }
+
+        // 멤버십 검증: 실제 APPROVED 멤버십이 있는 사업장만 default로 설정 가능
+        accessControlService.requireApprovedMembership(id, businessPlaceId);
 
         User user = userRepository.findById(UUID.fromString(id))
                 .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));

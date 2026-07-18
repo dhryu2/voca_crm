@@ -61,6 +61,12 @@ public class ReservationController {
             throw new AccessDeniedException("해당 사업장에 대한 접근 권한이 없습니다.");
         }
 
+        // 회원 존재 여부, 요청자 접근 권한, 삭제 회원 여부를 한 번에 검증
+        Member member = memberService.getMemberByIdWithUserCheck(request.getMemberId(), userId);
+        if (!member.getBusinessPlaceId().equals(request.getBusinessPlaceId())) {
+            throw new IllegalArgumentException("회원이 해당 사업장 소속이 아닙니다");
+        }
+
         Reservation reservation = new Reservation();
         if (request.getMemberId() != null) {
             reservation.setMemberId(UUID.fromString(request.getMemberId()));
@@ -72,9 +78,7 @@ public class ReservationController {
         reservation.setDurationMinutes(request.getDurationMinutes() != null ? request.getDurationMinutes() : 60);
         reservation.setNotes(request.getNotes());
         reservation.setRemark(request.getRemark());
-        if (request.getCreatedBy() != null) {
-            reservation.setCreatedBy(UUID.fromString(request.getCreatedBy()));
-        }
+        reservation.setCreatedBy(UUID.fromString(userId));
         if (request.getStatus() != null) {
             reservation.setStatus(request.getStatus());
         }
@@ -127,16 +131,8 @@ public class ReservationController {
             jakarta.servlet.http.HttpServletRequest servletRequest) {
         String userId = (String) servletRequest.getAttribute("userId");
 
-        // 회원이 사용자의 사업장에 속하는지 확인
-        Member member = memberService.getMemberById(memberId);
-
-        boolean hasAccess = userBusinessPlaceRepository
-                .existsByUserIdAndBusinessPlaceIdAndStatus(
-                        UUID.fromString(userId), member.getBusinessPlaceId(), AccessStatus.APPROVED);
-
-        if (!hasAccess) {
-            throw new AccessDeniedException("해당 회원의 예약에 대한 접근 권한이 없습니다.");
-        }
+        // 회원이 사용자의 사업장에 속하는지 확인 (삭제 대기 회원도 조회 가능)
+        Member member = memberService.getMemberByIdWithUserCheckIncludeDeleted(memberId, userId);
 
         List<Reservation> reservations = reservationService.getReservationsByMemberId(UUID.fromString(memberId), member.getBusinessPlaceId());
         return ResponseEntity.ok(reservations);
@@ -293,9 +289,7 @@ public class ReservationController {
         reservation.setDurationMinutes(request.getDurationMinutes());
         reservation.setNotes(request.getNotes());
         reservation.setRemark(request.getRemark());
-        if (request.getUpdatedBy() != null) {
-            reservation.setUpdatedBy(UUID.fromString(request.getUpdatedBy()));
-        }
+        reservation.setUpdatedBy(UUID.fromString(userId));
         if (request.getStatus() != null) {
             reservation.setStatus(request.getStatus());
         }
@@ -332,13 +326,10 @@ public class ReservationController {
             throw new AccessDeniedException("해당 예약에 대한 상태 변경 권한이 없습니다.");
         }
 
-        UUID updatedByUuid = request.getUpdatedBy() != null
-                ? UUID.fromString(request.getUpdatedBy())
-                : null;
         Reservation updated = reservationService.updateReservationStatus(
                 UUID.fromString(id),
                 request.getStatus(),
-                updatedByUuid);
+                UUID.fromString(userId));
         return ResponseEntity.ok(updated);
     }
 
@@ -403,16 +394,8 @@ public class ReservationController {
             jakarta.servlet.http.HttpServletRequest servletRequest) {
         String userId = (String) servletRequest.getAttribute("userId");
 
-        // 회원이 사용자의 사업장에 속하는지 확인
-        Member member = memberService.getMemberById(memberId);
-
-        boolean hasAccess = userBusinessPlaceRepository
-                .existsByUserIdAndBusinessPlaceIdAndStatus(
-                        UUID.fromString(userId), member.getBusinessPlaceId(), AccessStatus.APPROVED);
-
-        if (!hasAccess) {
-            throw new AccessDeniedException("해당 회원의 예약에 대한 접근 권한이 없습니다.");
-        }
+        // 회원이 사용자의 사업장에 속하는지 확인 (삭제 대기 회원도 조회 가능)
+        Member member = memberService.getMemberByIdWithUserCheckIncludeDeleted(memberId, userId);
 
         Long totalCount = reservationService.getMemberReservationCount(UUID.fromString(memberId), member.getBusinessPlaceId());
         Long completedCount = reservationService.getMemberCompletedReservationCount(UUID.fromString(memberId), member.getBusinessPlaceId());

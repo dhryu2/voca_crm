@@ -17,6 +17,6 @@ public interface StatisticsRepository extends JpaRepository<Member, UUID> {
     @Query(value = "SELECT get_pending_memos_count(:businessPlaceId)", nativeQuery = true)
     Integer getPendingMemosCount(@Param("businessPlaceId") String businessPlaceId);
 
-    @Query(value = "SELECT COUNT(DISTINCT m.id) FROM members m WHERE m.business_place_id = :businessPlaceId", nativeQuery = true)
+    @Query(value = "SELECT COUNT(DISTINCT m.id) FROM members m WHERE m.business_place_id = :businessPlaceId AND m.is_deleted = false", nativeQuery = true)
     Integer getTotalMembersCount(@Param("businessPlaceId") String businessPlaceId);
 }

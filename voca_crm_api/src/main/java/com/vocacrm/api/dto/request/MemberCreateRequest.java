@@ -36,7 +36,7 @@ public class MemberCreateRequest {
     private String email;
 
     @NotBlank(message = "사업장 ID는 필수입니다")
-    @Size(max = 36, message = "사업장 ID 형식이 올바르지 않습니다")
+    @Size(max = 7, message = "사업장 ID 형식이 올바르지 않습니다")
     private String businessPlaceId;
 
     @Size(max = 128, message = "소유자 ID 형식이 올바르지 않습니다")

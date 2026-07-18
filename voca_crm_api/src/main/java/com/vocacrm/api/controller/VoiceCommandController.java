@@ -2,6 +2,8 @@ package com.vocacrm.api.controller;
 
 import com.vocacrm.api.dto.VoiceCommandRequest;
 import com.vocacrm.api.dto.VoiceCommandResponse;
+import com.vocacrm.api.exception.AccessDeniedException;
+import com.vocacrm.api.service.AccessControlService;
 import com.vocacrm.api.service.VoiceCommandService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
 public class VoiceCommandController {
 
     private final VoiceCommandService voiceCommandService;
+    private final AccessControlService accessControlService;
 
     /**
      * 새 음성 명령 처리 엔드포인트 (AI 분석 필요)
@@ -149,9 +152,16 @@ public class VoiceCommandController {
                 businessPlaceId = (String) servletRequest.getAttribute("defaultBusinessPlaceId");
             }
 
+            // 대상 사업장에 대한 APPROVED 멤버십 검증 (타 사업장 데이터 유출 방지)
+            if (businessPlaceId != null) {
+                accessControlService.requireApprovedMembership(userId, businessPlaceId);
+            }
+
             VoiceCommandResponse response = voiceCommandService.generateDailyBriefing(userId, businessPlaceId);
             return ResponseEntity.ok(response);
 
+        } catch (AccessDeniedException e) {
+            throw e;
         } catch (Exception e) {
             log.error("❌ Error generating daily briefing: {}", e.getMessage(), e);
 

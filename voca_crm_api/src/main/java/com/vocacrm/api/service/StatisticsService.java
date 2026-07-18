@@ -117,6 +117,7 @@ public class StatisticsService {
         String sql = "SELECT DATE(created_at) as date, COUNT(*) as count " +
                      "FROM members " +
                      "WHERE business_place_id = ? " +
+                     "AND is_deleted = false " +
                      "AND DATE(created_at) BETWEEN ? AND ? " +
                      "GROUP BY DATE(created_at) " +
                      "ORDER BY date";
@@ -159,6 +160,7 @@ public class StatisticsService {
         String sql = "SELECT grade, COUNT(*) as count " +
                      "FROM members " +
                      "WHERE business_place_id = ? " +
+                     "AND is_deleted = false " +
                      "AND grade IS NOT NULL " +
                      "GROUP BY grade";
 
@@ -246,19 +248,21 @@ public class StatisticsService {
         // 전체 메모 개수
         String totalSql = "SELECT COUNT(*) FROM memos m " +
                           "JOIN members mb ON m.member_id = mb.id " +
-                          "WHERE mb.business_place_id = ?";
+                          "WHERE mb.business_place_id = ? AND m.is_deleted = false AND mb.is_deleted = false";
         Integer totalMemos = jdbcTemplate.queryForObject(totalSql, Integer.class, businessPlaceId);
 
         // 중요 메모 개수
         String importantSql = "SELECT COUNT(*) FROM memos m " +
                               "JOIN members mb ON m.member_id = mb.id " +
-                              "WHERE mb.business_place_id = ? AND m.is_important = true";
+                              "WHERE mb.business_place_id = ? AND m.is_important = true " +
+                              "AND m.is_deleted = false AND mb.is_deleted = false";
         Integer importantMemos = jdbcTemplate.queryForObject(importantSql, Integer.class, businessPlaceId);
 
         // 아카이브된 메모 개수
         String archivedSql = "SELECT COUNT(*) FROM memos m " +
                              "JOIN members mb ON m.member_id = mb.id " +
-                             "WHERE mb.business_place_id = ? AND m.is_archived = true";
+                             "WHERE mb.business_place_id = ? AND m.is_archived = true " +
+                             "AND m.is_deleted = false AND mb.is_deleted = false";
         Integer archivedMemos = jdbcTemplate.queryForObject(archivedSql, Integer.class, businessPlaceId);
 
         // 일별 메모 작성 추이
@@ -269,6 +273,7 @@ public class StatisticsService {
                           "FROM memos m " +
                           "JOIN members mb ON m.member_id = mb.id " +
                           "WHERE mb.business_place_id = ? " +
+                          "AND m.is_deleted = false AND mb.is_deleted = false " +
                           "AND DATE(m.created_at) BETWEEN ? AND ? " +
                           "GROUP BY DATE(m.created_at) " +
                           "ORDER BY date";

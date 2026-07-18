@@ -141,6 +141,11 @@ public class PushNotificationService {
                 handleMessagingException(e, token);
                 notificationLog.setStatus(NotificationStatus.FAILED);
                 notificationLog.setErrorMessage(e.getMessage());
+            } catch (Exception e) {
+                // Firebase 미초기화(IllegalStateException) 등 비-FCM 오류도 기록하여 감사 추적 보존
+                log.error("푸시 발송 실패(비-FCM 오류): {}", e.getMessage());
+                notificationLog.setStatus(NotificationStatus.FAILED);
+                notificationLog.setErrorMessage(e.getMessage());
             }
         }
 

@@ -1,6 +1,8 @@
 package com.vocacrm.api.service;
 
+import com.vocacrm.api.exception.InvalidInputException;
 import com.vocacrm.api.model.AccessStatus;
+import com.vocacrm.api.model.Role;
 import com.vocacrm.api.model.User;
 import com.vocacrm.api.model.UserBusinessPlace;
 import com.vocacrm.api.repository.BusinessPlaceAccessRequestRepository;
@@ -52,8 +54,16 @@ public class UserService {
 
         log.info("Starting user deletion process for userId: {}", userId);
 
-        // 1. 사용자가 등록된 모든 사업장에서 참조 정리
         UUID userUuid = UUID.fromString(userId);
+
+        // 0. 소유(OWNER) 중인 사업장이 있으면 삭제 거부 (고아 사업장 방지)
+        long ownedBusinessPlaceCount = userBusinessPlaceRepository
+                .countByUserIdAndRoleAndStatus(userUuid, Role.OWNER, AccessStatus.APPROVED);
+        if (ownedBusinessPlaceCount > 0) {
+            throw new InvalidInputException("소유한 사업장이 있어 계정을 삭제할 수 없습니다. 먼저 사업장을 삭제하거나 소유권을 이전한 뒤 다시 시도해주세요.");
+        }
+
+        // 1. 사용자가 등록된 모든 사업장에서 참조 정리
         List<UserBusinessPlace> userBusinessPlaces = userBusinessPlaceRepository.findByUserIdAndStatus(
                 userUuid, AccessStatus.APPROVED);
 

@@ -11,6 +11,7 @@ import com.vocacrm.api.dto.request.BusinessPlaceUpdateRequest;
 import com.vocacrm.api.model.BusinessPlace;
 import com.vocacrm.api.model.BusinessPlaceAccessRequest;
 import com.vocacrm.api.model.Role;
+import com.vocacrm.api.service.AccessControlService;
 import com.vocacrm.api.service.BusinessPlaceService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -27,6 +28,7 @@ import java.util.UUID;
 public class BusinessPlaceController {
 
     private final BusinessPlaceService businessPlaceService;
+    private final AccessControlService accessControlService;
 
     @PostMapping
     public ResponseEntity<CreateBusinessPlaceResponse> createBusinessPlace(
@@ -54,7 +56,9 @@ public class BusinessPlaceController {
      * 사업장 단일 조회
      */
     @GetMapping("/{id}")
-    public ResponseEntity<BusinessPlace> getBusinessPlace(@PathVariable String id) {
+    public ResponseEntity<BusinessPlace> getBusinessPlace(@PathVariable String id, HttpServletRequest servletRequest) {
+        String userId = (String) servletRequest.getAttribute("userId");
+        accessControlService.requireApprovedMembership(userId, id);
         BusinessPlace businessPlace = businessPlaceService.getBusinessPlaceById(id);
         return ResponseEntity.ok(businessPlace);
     }

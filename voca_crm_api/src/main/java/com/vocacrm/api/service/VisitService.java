@@ -1,5 +1,7 @@
 package com.vocacrm.api.service;
 
+import com.vocacrm.api.exception.InvalidInputException;
+import com.vocacrm.api.exception.ResourceNotFoundException;
 import com.vocacrm.api.model.Member;
 import com.vocacrm.api.model.Visit;
 import com.vocacrm.api.repository.VisitRepository;
@@ -35,7 +37,11 @@ public class VisitService {
     @Transactional
     public Visit checkInWithUserCheck(String memberId, String userId, String note) {
         // MemberService의 권한 체크 로직 활용 (회원이 사용자의 사업장에 속하는지 확인)
-        memberService.getMemberByIdWithUserCheck(memberId, userId);
+        // 삭제 대기 회원은 404 대신 명시적 400으로 거부한다
+        Member member = memberService.getMemberByIdWithUserCheckIncludeDeleted(memberId, userId);
+        if (Boolean.TRUE.equals(member.getIsDeleted())) {
+            throw new InvalidInputException("삭제된 회원은 체크인할 수 없습니다.");
+        }
 
         Visit visit = Visit.builder()
                 .memberId(UUID.fromString(memberId))
@@ -59,10 +65,11 @@ public class VisitService {
 
     /**
      * 방문 기록 조회 (회원 사업장 권한 체크 포함)
+     * 삭제 대기 회원의 과거 방문 기록도 조회 가능해야 하므로 삭제 여부는 필터하지 않는다.
      */
     public List<Visit> getVisitsByMemberWithUserCheck(String memberId, String userId) {
         // 회원이 사용자의 사업장에 속하는지 확인
-        Member member = memberService.getMemberByIdWithUserCheck(memberId, userId);
+        Member member = memberService.getMemberByIdWithUserCheckIncludeDeleted(memberId, userId);
 
         return visitRepository.findByMemberIdAndBusinessPlaceIdOrderByVisitedAtDesc(
                 UUID.fromString(memberId), member.getBusinessPlaceId());
@@ -82,7 +89,7 @@ public class VisitService {
     public void cancelCheckIn(String visitId, String businessPlaceId) {
         Visit visit = visitRepository.findByIdAndBusinessPlaceId(
                 UUID.fromString(visitId), businessPlaceId)
-                .orElseThrow(() -> new RuntimeException("방문 기록을 찾을 수 없습니다."));
+                .orElseThrow(() -> new ResourceNotFoundException("방문 기록을 찾을 수 없습니다."));
 
         visitRepository.delete(visit);
     }

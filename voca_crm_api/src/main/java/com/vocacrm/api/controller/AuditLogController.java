@@ -5,6 +5,7 @@ import com.vocacrm.api.model.AuditLog;
 import com.vocacrm.api.model.Role;
 import com.vocacrm.api.model.UserBusinessPlace;
 import com.vocacrm.api.repository.UserBusinessPlaceRepository;
+import com.vocacrm.api.service.AccessControlService;
 import com.vocacrm.api.service.AuditLogService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +41,7 @@ public class AuditLogController {
 
     private final AuditLogService auditLogService;
     private final UserBusinessPlaceRepository userBusinessPlaceRepository;
+    private final AccessControlService accessControlService;
 
     /**
      * 사업장별 감사 로그 목록 조회
@@ -137,7 +139,7 @@ public class AuditLogController {
             @PathVariable String entityId
     ) {
         String userId = (String) request.getAttribute("userId");
-        String businessPlaceId = (String) request.getAttribute("defaultBusinessPlaceId");
+        String businessPlaceId = accessControlService.currentDefaultBusinessPlace(userId);
 
         if (businessPlaceId == null) {
             return ResponseEntity.badRequest().body(Map.of(
@@ -184,7 +186,7 @@ public class AuditLogController {
             @RequestParam(defaultValue = "20") int size
     ) {
         String requestUserId = (String) request.getAttribute("userId");
-        String businessPlaceId = (String) request.getAttribute("defaultBusinessPlaceId");
+        String businessPlaceId = accessControlService.currentDefaultBusinessPlace(requestUserId);
 
         if (businessPlaceId == null) {
             return ResponseEntity.badRequest().body(Map.of(
@@ -249,7 +251,7 @@ public class AuditLogController {
             @RequestParam(defaultValue = "20") int size
     ) {
         String userId = (String) request.getAttribute("userId");
-        String businessPlaceId = (String) request.getAttribute("defaultBusinessPlaceId");
+        String businessPlaceId = accessControlService.currentDefaultBusinessPlace(userId);
 
         if (userId == null) {
             return ResponseEntity.badRequest().body(Map.of(
