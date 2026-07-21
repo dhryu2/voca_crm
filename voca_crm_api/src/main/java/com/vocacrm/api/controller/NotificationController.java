@@ -43,9 +43,12 @@ public class NotificationController {
      * FCM 토큰 등록/갱신
      */
     @PostMapping("/token")
-    public ResponseEntity<DeviceToken> registerToken(@Valid @RequestBody TokenRegistrationRequest request) {
+    public ResponseEntity<DeviceToken> registerToken(
+            @Valid @RequestBody TokenRegistrationRequest request,
+            jakarta.servlet.http.HttpServletRequest servletRequest) {
+        String userId = (String) servletRequest.getAttribute("userId");
         DeviceToken token = pushNotificationService.registerToken(
-                request.userId(),
+                userId,
                 request.fcmToken(),
                 request.deviceType(),
                 request.deviceInfo(),
@@ -59,8 +62,11 @@ public class NotificationController {
      * FCM 토큰 비활성화 (로그아웃 시)
      */
     @DeleteMapping("/token")
-    public ResponseEntity<Void> deactivateToken(@Valid @RequestBody TokenDeactivationRequest request) {
-        pushNotificationService.deactivateToken(request.fcmToken());
+    public ResponseEntity<Void> deactivateToken(
+            @Valid @RequestBody TokenDeactivationRequest request,
+            jakarta.servlet.http.HttpServletRequest servletRequest) {
+        String userId = (String) servletRequest.getAttribute("userId");
+        pushNotificationService.deactivateToken(userId, request.fcmToken());
         return ResponseEntity.ok().build();
     }
 
