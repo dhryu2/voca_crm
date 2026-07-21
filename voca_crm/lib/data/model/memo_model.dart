@@ -1,3 +1,4 @@
+import 'package:voca_crm/core/utils/date_parser.dart';
 import 'package:voca_crm/domain/entity/memo.dart';
 
 class MemoModel {
@@ -68,10 +69,10 @@ class MemoModel {
       ownerId: ownerId,
       lastModifiedById: lastModifiedById,
       isDeleted: isDeleted,
-      deletedAt: deletedAt != null ? DateTime.parse(deletedAt!) : null,
+      deletedAt: DateParser.fromServerNullable(deletedAt),
       deletedBy: deletedBy,
-      createdAt: DateTime.parse(createdAt),
-      updatedAt: DateTime.parse(updatedAt),
+      createdAt: DateParser.fromServer(createdAt),
+      updatedAt: DateParser.fromServer(updatedAt),
     );
   }
 

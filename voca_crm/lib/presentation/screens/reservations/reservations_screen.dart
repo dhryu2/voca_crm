@@ -31,6 +31,9 @@ class ReservationsScreen extends StatefulWidget {
 }
 
 class _ReservationsScreenState extends State<ReservationsScreen> {
+  /// 예약 가능한 최대 미래 일수 (백엔드 제한과 일치)
+  static const int maxReservationDaysAhead = 90;
+
   final _reservationRepository = ReservationRepositoryImpl(
     ReservationService(),
   );
@@ -52,6 +55,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   StreamSubscription<BusinessPlaceChangeEvent>?
   _businessPlaceChangeSubscription;
 
+  // 마지막으로 적용한 기본 사업장 ID (전환 감지용)
+  String? _lastAppliedDefaultBusinessPlaceId;
+
   @override
   void initState() {
     super.initState();
@@ -62,6 +68,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       final userViewModel = Provider.of<UserViewModel>(context, listen: false);
       final currentUser = userViewModel.user;
       _selectedBusinessPlaceId =
+          currentUser?.defaultBusinessPlaceId ??
+          widget.user.defaultBusinessPlaceId;
+      _lastAppliedDefaultBusinessPlaceId =
           currentUser?.defaultBusinessPlaceId ??
           widget.user.defaultBusinessPlaceId;
       _initializeData();
@@ -82,13 +91,13 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     final newDefaultBusinessPlaceId =
         userViewModel.user?.defaultBusinessPlaceId;
 
-    // 기본 사업장이 변경되었고, 현재 선택된 사업장이 없으면 새 기본값 사용
+    // 기본 사업장이 직전 적용값과 다르면 새 기본값으로 재조회
     if (newDefaultBusinessPlaceId != null &&
         newDefaultBusinessPlaceId.isNotEmpty &&
-        (_selectedBusinessPlaceId == null ||
-            _selectedBusinessPlaceId!.isEmpty)) {
+        newDefaultBusinessPlaceId != _lastAppliedDefaultBusinessPlaceId) {
       setState(() {
         _selectedBusinessPlaceId = newDefaultBusinessPlaceId;
+        _lastAppliedDefaultBusinessPlaceId = newDefaultBusinessPlaceId;
       });
       _loadReservations();
     }
@@ -434,7 +443,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                             initialDate: selectedDate,
                                             firstDate: DateTime.now(),
                                             lastDate: DateTime.now().add(
-                                              const Duration(days: 365),
+                                              const Duration(
+                                                days: maxReservationDaysAhead,
+                                              ),
                                             ),
                                           );
                                           if (date != null) {
@@ -1599,7 +1610,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                             initialDate: selectedDate,
                                             firstDate: DateTime(2020),
                                             lastDate: DateTime.now().add(
-                                              const Duration(days: 365),
+                                              const Duration(
+                                                days: maxReservationDaysAhead,
+                                              ),
                                             ),
                                           );
                                           if (date != null) {

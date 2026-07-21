@@ -209,35 +209,57 @@ class MemberService {
   }
 
   /// 전체 회원 목록 조회
-  /// [skip]: 페이지 번호 (기본값: 0)
-  /// [limit]: 페이지 크기 (기본값: 1000, 대부분의 경우를 커버하도록 큰 값 설정)
+  /// 백엔드가 페이지당 최대 100건으로 제한하므로, 더 이상 조회되지 않을 때까지
+  /// 100건씩 반복 조회하여 전량을 수집한다.
+  /// [skip]: 조회 시작 오프셋 (기본값: 0)
+  /// [limit]: 페이지당 요청 건수 (백엔드 상한 100으로 클램프)
   Future<List<MemberModel>> getAllMembers({
     int skip = 0,
-    int limit = 1000,
+    int limit = 100,
   }) async {
-    try {
-      final response = await _apiClient.get(
-        '/api/members',
-        queryParams: {
-          'skip': skip.toString(),
-          'limit': limit.toString(),
-        },
-      );
+    final int pageSize = (limit > 0 && limit < 100) ? limit : 100;
+    // 무한 루프 방지용 안전 상한 (100건 * 1000페이지 = 최대 10만건)
+    const int maxPages = 1000;
 
-      if (response.statusCode == 200) {
+    final List<MemberModel> allMembers = [];
+    int currentSkip = skip;
+
+    try {
+      for (int page = 0; page < maxPages; page++) {
+        final response = await _apiClient.get(
+          '/api/members',
+          queryParams: {
+            'skip': currentSkip.toString(),
+            'limit': pageSize.toString(),
+          },
+        );
+
+        if (response.statusCode != 200) {
+          break;
+        }
+
         final responseData = jsonDecode(response.body);
         // Spring Boot Page response has 'content' field
         final List<dynamic>? data = responseData['content'] as List<dynamic>?;
 
-        if (data == null) {
-          return [];
+        if (data == null || data.isEmpty) {
+          break;
         }
 
-        return data.map((json) => MemberModel.fromJson(json as Map<String, dynamic>)).toList();
+        allMembers.addAll(
+          data.map((json) => MemberModel.fromJson(json as Map<String, dynamic>)),
+        );
+
+        // 마지막 페이지(받은 개수가 페이지 크기 미만)면 종료
+        if (data.length < pageSize) {
+          break;
+        }
+
+        currentSkip += pageSize;
       }
-      return [];
+      return allMembers;
     } catch (e) {
-      return [];
+      return allMembers;
     }
   }
 
