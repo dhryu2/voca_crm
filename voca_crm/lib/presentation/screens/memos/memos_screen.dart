@@ -61,6 +61,9 @@ class _MemosScreenState extends State<MemosScreen>
   DateTime? _endDate;
   bool _isFilterExpanded = false;
 
+  // 마지막으로 적용한 기본 사업장 ID (전환 감지용)
+  String? _lastAppliedDefaultBusinessPlaceId;
+
   // Business place change listener
   StreamSubscription<BusinessPlaceChangeEvent>?
   _businessPlaceChangeSubscription;
@@ -76,6 +79,7 @@ class _MemosScreenState extends State<MemosScreen>
       final userViewModel = Provider.of<UserViewModel>(context, listen: false);
       final currentUser = userViewModel.user;
       _selectedBusinessPlaceFilter = currentUser?.defaultBusinessPlaceId ?? widget.user.defaultBusinessPlaceId;
+      _lastAppliedDefaultBusinessPlaceId = currentUser?.defaultBusinessPlaceId ?? widget.user.defaultBusinessPlaceId;
       _loadMembersWithMemos();
       _loadBusinessPlaces();
     });
@@ -105,12 +109,13 @@ class _MemosScreenState extends State<MemosScreen>
     final userViewModel = Provider.of<UserViewModel>(context);
     final newDefaultBusinessPlaceId = userViewModel.user?.defaultBusinessPlaceId;
 
-    // 기본 사업장이 변경되었고, 현재 선택된 사업장이 없으면 새 기본값 사용
+    // 기본 사업장이 직전 적용값과 다르면 새 기본값으로 재조회
     if (newDefaultBusinessPlaceId != null &&
         newDefaultBusinessPlaceId.isNotEmpty &&
-        (_selectedBusinessPlaceFilter == null || _selectedBusinessPlaceFilter!.isEmpty)) {
+        newDefaultBusinessPlaceId != _lastAppliedDefaultBusinessPlaceId) {
       setState(() {
         _selectedBusinessPlaceFilter = newDefaultBusinessPlaceId;
+        _lastAppliedDefaultBusinessPlaceId = newDefaultBusinessPlaceId;
       });
       _loadMembersWithMemos();
     }
@@ -693,7 +698,22 @@ class _MemosScreenState extends State<MemosScreen>
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
 
-    List<Memo> memos = await _memoRepository.getMemosByMemberId(member.id);
+    List<Memo> memos;
+    try {
+      memos = await _memoRepository.getMemosByMemberId(member.id);
+    } catch (e, stackTrace) {
+      if (!mounted) return;
+      await AppMessageHandler.handleErrorWithLogging(
+        context,
+        e,
+        stackTrace,
+        screenName: 'MemosScreen',
+        action: '회원 메모 조회',
+        userId: widget.user.id,
+        businessPlaceId: _selectedBusinessPlaceFilter,
+      );
+      return;
+    }
 
     if (!mounted) return;
 
@@ -703,13 +723,26 @@ class _MemosScreenState extends State<MemosScreen>
         builder: (context, setDialogState) {
           // Reload memos function
           Future<void> reloadMemos() async {
-            final newMemos = await _memoRepository.getMemosByMemberId(
-              member.id,
-            );
-            setDialogState(() {
-              memos = newMemos;
-            });
-            _loadMembersWithMemos(); // Also refresh main list
+            try {
+              final newMemos = await _memoRepository.getMemosByMemberId(
+                member.id,
+              );
+              setDialogState(() {
+                memos = newMemos;
+              });
+              _loadMembersWithMemos(); // Also refresh main list
+            } catch (e, stackTrace) {
+              if (!mounted) return;
+              await AppMessageHandler.handleErrorWithLogging(
+                context,
+                e,
+                stackTrace,
+                screenName: 'MemosScreen',
+                action: '회원 메모 조회',
+                userId: widget.user.id,
+                businessPlaceId: _selectedBusinessPlaceFilter,
+              );
+            }
           }
 
           return Dialog(

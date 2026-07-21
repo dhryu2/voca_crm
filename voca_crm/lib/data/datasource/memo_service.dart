@@ -52,57 +52,54 @@ class MemoService {
 
   /// ID로 메모 조회
   Future<MemoModel?> getMemoById(String id) async {
-    try {
-      final response = await _apiClient.get('/api/memos/$id');
+    final response = await _apiClient.get('/api/memos/$id');
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return MemoModel.fromJson(data);
-      }
-      return null;
-    } catch (e) {
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return MemoModel.fromJson(data);
+    }
+    if (response.statusCode == 404) {
       return null;
     }
+    throw ExceptionParser.fromHttpResponse(response);
   }
 
   /// 회원 ID로 메모 목록 조회
   Future<List<MemoModel>> getMemosByMemberId(String memberId) async {
-    try {
-      final response = await _apiClient.get('/api/memos/member/$memberId');
+    final response = await _apiClient.get('/api/memos/member/$memberId');
 
-      if (response.statusCode == 200) {
-        final responseData = jsonDecode(response.body);
-        final List<dynamic>? data = responseData['data'] as List<dynamic>?;
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(response.body);
+      final List<dynamic>? data = responseData['data'] as List<dynamic>?;
 
-        if (data == null) {
-          return [];
-        }
-
-        return data
-            .map((json) => MemoModel.fromJson(json as Map<String, dynamic>))
-            .toList();
+      if (data == null) {
+        return [];
       }
-      return [];
-    } catch (e) {
+
+      return data
+          .map((json) => MemoModel.fromJson(json as Map<String, dynamic>))
+          .toList();
+    }
+    if (response.statusCode == 404) {
       return [];
     }
+    throw ExceptionParser.fromHttpResponse(response);
   }
 
   /// 회원의 최신 메모 조회
   Future<MemoModel?> getLatestMemoByMemberId(String memberId) async {
-    try {
-      final response = await _apiClient.get(
-        '/api/memos/member/$memberId/latest',
-      );
+    final response = await _apiClient.get(
+      '/api/memos/member/$memberId/latest',
+    );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return MemoModel.fromJson(data);
-      }
-      return null;
-    } catch (e) {
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return MemoModel.fromJson(data);
+    }
+    if (response.statusCode == 404) {
       return null;
     }
+    throw ExceptionParser.fromHttpResponse(response);
   }
 
   /// 메모 수정
@@ -215,53 +212,51 @@ class MemoService {
   Future<List<MemoModel>> getDeletedMemos({
     required String businessPlaceId,
   }) async {
-    try {
-      final response = await _apiClient.get(
-        '/api/memos/deleted',
-        queryParams: {'businessPlaceId': businessPlaceId},
-      );
+    final response = await _apiClient.get(
+      '/api/memos/deleted',
+      queryParams: {'businessPlaceId': businessPlaceId},
+    );
 
-      if (response.statusCode == 200) {
-        final responseData = jsonDecode(response.body);
-        final List<dynamic>? data = responseData['data'] as List<dynamic>?;
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(response.body);
+      final List<dynamic>? data = responseData['data'] as List<dynamic>?;
 
-        if (data == null) {
-          return [];
-        }
-
-        return data
-            .map((json) => MemoModel.fromJson(json as Map<String, dynamic>))
-            .toList();
+      if (data == null) {
+        return [];
       }
-      return [];
-    } catch (e) {
+
+      return data
+          .map((json) => MemoModel.fromJson(json as Map<String, dynamic>))
+          .toList();
+    }
+    if (response.statusCode == 404) {
       return [];
     }
+    throw ExceptionParser.fromHttpResponse(response);
   }
 
   /// 삭제 대기 중인 메모 목록 조회 (회원별)
   Future<List<MemoModel>> getDeletedMemosByMemberId(String memberId) async {
-    try {
-      final response = await _apiClient.get(
-        '/api/memos/member/$memberId/deleted',
-      );
+    final response = await _apiClient.get(
+      '/api/memos/member/$memberId/deleted',
+    );
 
-      if (response.statusCode == 200) {
-        final responseData = jsonDecode(response.body);
-        final List<dynamic>? data = responseData['data'] as List<dynamic>?;
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(response.body);
+      final List<dynamic>? data = responseData['data'] as List<dynamic>?;
 
-        if (data == null) {
-          return [];
-        }
-
-        return data
-            .map((json) => MemoModel.fromJson(json as Map<String, dynamic>))
-            .toList();
+      if (data == null) {
+        return [];
       }
-      return [];
-    } catch (e) {
+
+      return data
+          .map((json) => MemoModel.fromJson(json as Map<String, dynamic>))
+          .toList();
+    }
+    if (response.statusCode == 404) {
       return [];
     }
+    throw ExceptionParser.fromHttpResponse(response);
   }
 
   /// 삭제 대기 메모 복원
