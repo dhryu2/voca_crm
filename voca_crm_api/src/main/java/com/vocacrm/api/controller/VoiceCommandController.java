@@ -107,6 +107,8 @@ public class VoiceCommandController {
             VoiceCommandResponse response = voiceCommandService.processContinuedConversation(request);
             return ResponseEntity.ok(response);
 
+        } catch (AccessDeniedException e) {
+            throw e;
         } catch (Exception e) {
             log.error("❌ Error continuing conversation: {}", e.getMessage(), e);
 

@@ -103,12 +103,13 @@ public class AiServerClient {
 
                 // JSON 문자열을 AiAnalysisResult 목록으로 파싱 (배열/객체 모두 지원)
                 List<AiAnalysisResult> results = parseAiResponse(response.getResponse());
+                AiAnalysisResult firstResult = (results != null && !results.isEmpty()) ? results.get(0) : null;
 
-                if (results != null && !results.isEmpty() && results.get(0).getCategory() != null) {
+                if (firstResult != null && firstResult.getCategory() != null && !isParseFailure(firstResult)) {
                     return results;
                 }
 
-                log.warn("Parsed result is incomplete (attempt {})", attempt + 1);
+                log.warn("Parsed result is incomplete or unparsable (attempt {})", attempt + 1);
 
             } catch (WebClientResponseException e) {
                 log.warn("AI server HTTP error (attempt {}): {} - {}", attempt + 1, e.getStatusCode(), e.getMessage());
@@ -262,12 +263,20 @@ public class AiServerClient {
     }
 
     /**
-     * 에러 결과 생성
+     * AI 응답 파싱 자체가 실패한 결과인지 확인
+     * (모델이 실제로 ERROR 카테고리를 응답한 것이 아니라, 서버 통신/JSON 추출·파싱이 실패한 경우)
+     */
+    private boolean isParseFailure(AiAnalysisResult result) {
+        return "ERROR".equalsIgnoreCase(result.getCategory()) && "PARSE_FAILURE".equals(result.getAction());
+    }
+
+    /**
+     * 에러 결과 생성 (AI 응답 파싱 실패)
      */
     private AiAnalysisResult createErrorResult(String message, Exception cause) {
         AiAnalysisResult result = new AiAnalysisResult();
         result.setCategory("ERROR");
-        result.setAction("UNKNOWN");
+        result.setAction("PARSE_FAILURE");
 
         Map<String, Object> parameters = new HashMap<>();
         parameters.put("message", message);

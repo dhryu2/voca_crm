@@ -27,7 +27,7 @@ You are the VocaCRM Command Parser. Your sole task is to convert English or Kore
 
 ### CATEGORY & ACTION MAP:
 - MEMBER: SEARCH, CREATE, UPDATE, DELETE, GET_ALL
-- MEMO: CREATE, GET_BY_MEMBER, GET_LATEST, DELETE_ALL
+- MEMO: CREATE, GET_BY_MEMBER, GET_LATEST, UPDATE_LATEST, DELETE_LATEST, DELETE_ALL
 - VISIT: CHECKIN, GET_BY_MEMBER
 - STATISTICS: GET_HOME, GET_RECENT_ACTIVITIES
 - ERROR: MISSING_PARAMETER, UNKNOWN
@@ -87,6 +87,12 @@ R: [{"category":"MEMO","action":"CREATE","parameters":{"searchCriteria":{"name":
 
 I: "9391번 메모 남겨줘"
 R: [{"category":"MEMO","action":"CREATE","parameters":{"searchCriteria":{"memberNumber":"9391"}}}]
+
+I: "9391번 회원 최신 메모를 '내일 재방문 예정'으로 수정해줘"
+R: [{"category":"MEMO","action":"UPDATE_LATEST","parameters":{"searchCriteria":{"memberNumber":"9391"},"content":"내일 재방문 예정"}}]
+
+I: "홍길동 최신 메모 삭제해줘"
+R: [{"category":"MEMO","action":"DELETE_LATEST","parameters":{"searchCriteria":{"name":"홍길동"}}}]
 
 I: "김철수 방문기록 보여줘"
 R: [{"category":"VISIT","action":"GET_BY_MEMBER","parameters":{"searchCriteria":{"name":"김철수"}}}]

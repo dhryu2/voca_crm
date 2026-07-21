@@ -27,6 +27,36 @@ enum VoiceState {
   permissionDenied,
 }
 
+/// 명령 완료 응답 데이터에서 카드에 반영할 member/memo 데이터를 추출한다.
+///
+/// 단일 액션 응답은 data['member']/data['memo']를 그대로 사용하고,
+/// 멀티액션 응답(data['steps'])은 단계를 순회하며 마지막으로 회원/메모가
+/// 포함된 단계를 각각 독립적으로 유지한다. (memo 없는 후속 회원 단계가
+/// 앞선 메모를 null로 덮어쓰지 않도록)
+({dynamic member, dynamic memo}) resolveMemberAndMemoData(
+  Map<String, dynamic>? data,
+) {
+  var memberData = data?['member'];
+  var memoData = data?['memo'];
+
+  if (memberData == null && data?['steps'] is List) {
+    final steps = data!['steps'] as List<dynamic>;
+    for (final step in steps) {
+      final stepData = (step as Map<String, dynamic>)['data'];
+      if (stepData is Map<String, dynamic>) {
+        if (stepData['member'] != null) {
+          memberData = stepData['member'];
+        }
+        if (stepData['memo'] != null) {
+          memoData = stepData['memo'];
+        }
+      }
+    }
+  }
+
+  return (member: memberData, memo: memoData);
+}
+
 class VoiceCommandScreen extends StatefulWidget {
   const VoiceCommandScreen({super.key});
 
@@ -619,21 +649,9 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
       _isWaitingForNumberResponse = false;
     });
 
-    var memberData = response.data?['member'];
-    var memoData = response.data?['memo'];
-
-    // 멀티액션 응답은 data['steps']에 단계별 결과가 담긴다.
-    // 마지막으로 회원 정보가 포함된 단계를 카드에 반영
-    if (memberData == null && response.data?['steps'] is List) {
-      final steps = response.data!['steps'] as List<dynamic>;
-      for (final step in steps) {
-        final stepData = (step as Map<String, dynamic>)['data'];
-        if (stepData is Map<String, dynamic> && stepData['member'] != null) {
-          memberData = stepData['member'];
-          memoData = stepData['memo'];
-        }
-      }
-    }
+    final resolved = resolveMemberAndMemoData(response.data);
+    final memberData = resolved.member;
+    final memoData = resolved.memo;
 
     if (memberData != null) {
       final member = Member.fromJson(memberData as Map<String, dynamic>);

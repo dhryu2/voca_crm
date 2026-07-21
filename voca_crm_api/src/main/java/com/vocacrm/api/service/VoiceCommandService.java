@@ -1,6 +1,7 @@
 package com.vocacrm.api.service;
 
 import com.vocacrm.api.dto.*;
+import com.vocacrm.api.exception.AccessDeniedException;
 import com.vocacrm.api.model.Member;
 import com.vocacrm.api.model.Memo;
 import com.vocacrm.api.model.Visit;
@@ -28,6 +29,7 @@ public class VoiceCommandService {
     private final MemoService memoService;
     private final VisitService visitService;
     private final ReservationService reservationService;
+    private final AccessControlService accessControlService;
     private final com.vocacrm.api.repository.UserRepository userRepository;
 
     /**
@@ -68,6 +70,8 @@ public class VoiceCommandService {
 
             return processContinuedConversationInternal(request, businessPlaceId);
 
+        } catch (AccessDeniedException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Error continuing conversation: {}", e.getMessage(), e);
             return createErrorResponse("대화 처리 중 오류가 발생했습니다: " + e.getMessage(), "PROCESSING_ERROR");
@@ -108,17 +112,25 @@ public class VoiceCommandService {
     /**
      * 멀티액션 순차 처리
      * 한 명령에 여러 작업이 포함된 경우(예: "등록하고 바로 체크인") 각 작업을 순서대로 실행한다.
-     * 주의: 배치 실행 중에는 후보 선택/확인 같은 대화형(clarification) 단계를 이어가지 않고,
-     *       각 단계의 결과 메시지를 모아 한 번에 반환한다.
+     * 어떤 단계가 후보 선택/확인/내용 입력 같은 대화형(clarification) 응답을 요구하면
+     * 그 응답을 그대로 반환해 대화가 이어지도록 한다.
+     * 어떤 단계가 error를 반환하면 최종 상태를 error로 승격하고 errorCode를 전달한다.
      */
     private VoiceCommandResponse processMultipleActions(List<AiAnalysisResult> aiResults, ConversationContextDTO context) {
         List<String> messages = new ArrayList<>();
         List<Map<String, Object>> steps = new ArrayList<>();
+        boolean hasError = false;
+        String errorCode = null;
 
         for (AiAnalysisResult aiResult : aiResults) {
             VoiceCommandResponse stepResponse = aiResult.isError()
                     ? handleErrorResponse(aiResult)
                     : routeByCategory(aiResult, context);
+
+            // 후보 선택/확인/내용 입력이 필요한 단계는 대화를 이어가도록 그대로 반환
+            if ("clarification_needed".equals(stepResponse.getStatus())) {
+                return stepResponse;
+            }
 
             if (stepResponse.getMessage() != null) {
                 messages.add(stepResponse.getMessage());
@@ -131,11 +143,19 @@ public class VoiceCommandService {
                 step.put("data", stepResponse.getData());
             }
             steps.add(step);
+
+            if ("error".equals(stepResponse.getStatus())) {
+                hasError = true;
+                if (errorCode == null) {
+                    errorCode = stepResponse.getErrorCode();
+                }
+            }
         }
 
         return VoiceCommandResponse.builder()
-                .status("completed")
+                .status(hasError ? "error" : "completed")
                 .message(String.join(" ", messages))
+                .errorCode(errorCode)
                 .data(Map.of("steps", steps))
                 .build();
     }
@@ -162,16 +182,25 @@ public class VoiceCommandService {
 
     /**
      * AI 에러 응답 처리
+     * AI가 채운 message는 Modelfile 내부 표현(영어 포함)일 수 있으므로 사용자에게 그대로 노출하지 않고
+     * errorCode별로 한국어 안내 메시지를 확정해서 반환한다.
      */
     private VoiceCommandResponse handleErrorResponse(AiAnalysisResult aiResult) {
         String action = aiResult.getAction();
-        String message = aiResult.getErrorMessage();
 
-        if (message == null) {
-            message = "명령을 이해할 수 없습니다.";
+        String errorCode;
+        String message;
+
+        if ("MISSING_PARAMETER".equals(action)) {
+            errorCode = "MISSING_PARAMETER";
+            message = "이름이나 회원번호 등 필요한 정보를 말씀해주세요.";
+        } else if ("DAILY_LIMIT_EXCEEDED".equals(action)) {
+            errorCode = "DAILY_LIMIT_EXCEEDED";
+            message = "오늘의 AI 분석 사용량을 초과했습니다. 내일 다시 시도해주세요.";
+        } else {
+            errorCode = "UNKNOWN_COMMAND";
+            message = "명령을 이해하지 못했습니다. 다시 말씀해주세요.";
         }
-
-        String errorCode = "MISSING_PARAMETER".equals(action) ? "MISSING_PARAMETER" : "UNKNOWN_COMMAND";
 
         return createErrorResponse(message, errorCode);
     }
@@ -204,7 +233,7 @@ public class VoiceCommandService {
             return handleMemberGetAll(aiResult, context);
         }
 
-        List<Member> members = findMembersBySearchCriteria(searchCriteria, specificMemberId, context.getBusinessPlaceId());
+        List<Member> members = findMembersBySearchCriteria(searchCriteria, specificMemberId, context.getBusinessPlaceId(), context.getRequestUserId());
 
         if (members.isEmpty()) {
             return createCompletedResponse("조건에 맞는 회원을 찾을 수 없습니다.", Map.of());
@@ -284,7 +313,7 @@ public class VoiceCommandService {
 
     private VoiceCommandResponse handleMemberUpdate(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String specificMemberId = getSelectedMemberId(context);
-        List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId());
+        List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId(), context.getRequestUserId());
 
         if (members.isEmpty()) {
             return createCompletedResponse("수정할 회원을 찾을 수 없습니다.", Map.of());
@@ -332,7 +361,7 @@ public class VoiceCommandService {
 
     private VoiceCommandResponse handleMemberDelete(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String specificMemberId = getSelectedMemberId(context);
-        List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId());
+        List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId(), context.getRequestUserId());
 
         if (members.isEmpty()) {
             return createCompletedResponse("삭제할 회원을 찾을 수 없습니다.", Map.of());
@@ -409,7 +438,7 @@ public class VoiceCommandService {
 
     private VoiceCommandResponse handleMemoGetByMember(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String specificMemberId = getSelectedMemberId(context);
-        List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId());
+        List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId(), context.getRequestUserId());
 
         if (members.isEmpty()) {
             return createCompletedResponse("회원을 찾을 수 없습니다.", Map.of());
@@ -433,7 +462,7 @@ public class VoiceCommandService {
 
     private VoiceCommandResponse handleMemoGetLatest(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String specificMemberId = getSelectedMemberId(context);
-        List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId());
+        List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId(), context.getRequestUserId());
 
         if (members.isEmpty()) {
             return createCompletedResponse("회원을 찾을 수 없습니다.", Map.of());
@@ -462,7 +491,7 @@ public class VoiceCommandService {
 
     private VoiceCommandResponse handleMemoCreate(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String specificMemberId = getSelectedMemberId(context);
-        List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId());
+        List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId(), context.getRequestUserId());
 
         if (members.isEmpty()) {
             return createCompletedResponse("회원을 찾을 수 없습니다.", Map.of());
@@ -487,7 +516,7 @@ public class VoiceCommandService {
 
     private VoiceCommandResponse handleMemoUpdateLatest(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String specificMemberId = getSelectedMemberId(context);
-        List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId());
+        List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId(), context.getRequestUserId());
 
         if (members.isEmpty()) {
             return createCompletedResponse("회원을 찾을 수 없습니다.", Map.of());
@@ -530,7 +559,7 @@ public class VoiceCommandService {
 
     private VoiceCommandResponse handleMemoDeleteLatest(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String specificMemberId = getSelectedMemberId(context);
-        List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId());
+        List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId(), context.getRequestUserId());
 
         if (members.isEmpty()) {
             return createCompletedResponse("회원을 찾을 수 없습니다.", Map.of());
@@ -566,7 +595,7 @@ public class VoiceCommandService {
 
     private VoiceCommandResponse handleMemoDeleteAll(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String specificMemberId = getSelectedMemberId(context);
-        List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId());
+        List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId(), context.getRequestUserId());
 
         if (members.isEmpty()) {
             return createCompletedResponse("회원을 찾을 수 없습니다.", Map.of());
@@ -635,7 +664,7 @@ public class VoiceCommandService {
 
     private VoiceCommandResponse handleVisitCheckin(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String specificMemberId = getSelectedMemberId(context);
-        List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId());
+        List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId(), context.getRequestUserId());
 
         if (members.isEmpty()) {
             return createCompletedResponse("회원을 찾을 수 없습니다.", Map.of());
@@ -673,7 +702,7 @@ public class VoiceCommandService {
 
     private VoiceCommandResponse handleVisitGetByMember(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String specificMemberId = getSelectedMemberId(context);
-        List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId());
+        List<Member> members = findMembersBySearchCriteria(aiResult.getSearchCriteria(), specificMemberId, context.getBusinessPlaceId(), context.getRequestUserId());
 
         if (members.isEmpty()) {
             return createCompletedResponse("회원을 찾을 수 없습니다.", Map.of());
@@ -796,8 +825,21 @@ public class VoiceCommandService {
         ConversationContextDTO context = request.getContext();
         ConversationStep currentStep = context.getCurrentStep();
 
-        if (context.getBusinessPlaceId() == null && businessPlaceId != null) {
+        // 신뢰 가능한 유일 입력은 JWT userId. 클라이언트가 보낸 context의 인가 정보는 서버 값으로 재설정한다.
+        String userId = request.getUserId();
+        context.setRequestUserId(userId);
+
+        // 이미 선택된 회원이 있으면 그 회원의 실제 사업장을 서버에서 도출해 인가 검증한다.
+        // (클라이언트가 보낸 businessPlaceId/회원 UUID를 인가 근거로 신뢰하지 않는다.)
+        String selectedMemberId = getSelectedMemberId(context);
+        if (selectedMemberId != null) {
+            Member member = memberService.getMemberByIdWithUserCheck(selectedMemberId, userId);
+            context.setBusinessPlaceId(member.getBusinessPlaceId());
+        } else {
             context.setBusinessPlaceId(businessPlaceId);
+            if (businessPlaceId != null) {
+                accessControlService.requireApprovedMembership(userId, businessPlaceId);
+            }
         }
 
         return switch (currentStep.getStepType()) {
@@ -928,11 +970,11 @@ public class VoiceCommandService {
 
     // ===== Helper Methods =====
 
-    private List<Member> findMembersBySearchCriteria(Map<String, Object> searchCriteria, String specificMemberId, String businessPlaceId) {
-        // 이미 선택된 회원이 있는 경우
+    private List<Member> findMembersBySearchCriteria(Map<String, Object> searchCriteria, String specificMemberId, String businessPlaceId, String userId) {
+        // 이미 선택된 회원이 있는 경우 (사용자 권한 체크 포함 조회로 크로스테넌트 접근 차단)
         if (specificMemberId != null && !specificMemberId.isEmpty()) {
             try {
-                Member member = memberService.getMemberById(specificMemberId);
+                Member member = memberService.getMemberByIdWithUserCheck(specificMemberId, userId);
                 return Collections.singletonList(member);
             } catch (Exception e) {
                 return Collections.emptyList();
