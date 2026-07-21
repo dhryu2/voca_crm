@@ -34,7 +34,7 @@ import java.util.UUID;
  * - GET /api/members/search - 다중 조건 검색
  * - POST /api/members - 회원 생성
  * - PUT /api/members/{id} - 회원 수정
- * - DELETE /api/members/{id} - 회원 삭제
+ * - DELETE /api/members/{id}/soft - 회원 삭제 대기 상태로 전환
  *
  * CORS 설정: WebConfig에서 모든 origin 허용 설정됨
  *
@@ -367,45 +367,6 @@ public class MemberController {
         return ResponseEntity.ok(updated);
     }
 
-    /**
-     * 회원 삭제
-     *
-     * HTTP Method: DELETE
-     * URL: /api/members/{id}
-     *
-     * Path Variable:
-     * - id: 삭제할 회원의 UUID
-     *
-     * Required Headers:
-     * - Authorization: Bearer {JWT token}
-     *
-     * 예시 요청: DELETE /api/members/550e8400-e29b-41d4-a716-446655440000
-     *
-     * 주의사항:
-     * - 삭제된 회원은 복구할 수 없습니다
-     * - 연관된 메모는 자동으로 삭제되지 않습니다 (수동 삭제 필요)
-     *
-     * @param id 삭제할 회원의 UUID
-     * @param servletRequest HttpServletRequest (JWT에서 추출한 정보 포함)
-     * @return 응답 본문 없음 (HTTP 204 No Content)
-     * @deprecated Soft Delete 사용 권장 - softDeleteMember 사용
-     */
-    @Deprecated
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteMember(
-            @PathVariable String id,
-            jakarta.servlet.http.HttpServletRequest servletRequest) {
-
-        // JWT에서 추출한 사용자 정보 가져오기
-        String requestUserId = (String) servletRequest.getAttribute("userId");
-        String businessPlaceId = (String) servletRequest.getAttribute("defaultBusinessPlaceId");
-
-        // 항상 권한 체크 수행
-        memberService.deleteMemberWithPermission(id, requestUserId, businessPlaceId);
-
-        return ResponseEntity.noContent().build();
-    }
-
     // ===== Soft Delete 관련 엔드포인트 =====
 
     /**
@@ -436,7 +397,6 @@ public class MemberController {
     @DeleteMapping("/{id}/soft")
     public ResponseEntity<Member> softDeleteMember(
             @PathVariable String id,
-            @RequestHeader(value = "X-Business-Place-Id", required = false) String businessPlaceId,
             jakarta.servlet.http.HttpServletRequest servletRequest) {
 
         String requestUserId = (String) servletRequest.getAttribute("userId");
@@ -510,7 +470,6 @@ public class MemberController {
     @PostMapping("/{id}/restore")
     public ResponseEntity<Member> restoreMember(
             @PathVariable String id,
-            @RequestHeader(value = "X-Business-Place-Id", required = false) String businessPlaceId,
             jakarta.servlet.http.HttpServletRequest servletRequest) {
 
         String requestUserId = (String) servletRequest.getAttribute("userId");
@@ -544,7 +503,6 @@ public class MemberController {
     @DeleteMapping("/{id}/permanent")
     public ResponseEntity<Void> permanentDeleteMember(
             @PathVariable String id,
-            @RequestHeader(value = "X-Business-Place-Id", required = false) String businessPlaceId,
             jakarta.servlet.http.HttpServletRequest servletRequest) {
 
         String requestUserId = (String) servletRequest.getAttribute("userId");

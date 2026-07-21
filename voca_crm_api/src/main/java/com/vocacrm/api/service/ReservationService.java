@@ -177,9 +177,13 @@ public class ReservationService {
      * - 과거 날짜 예약 불가
      * - 90일 초과 미래 예약 불가
      * - 중복 예약 체크 (자기 자신 제외)
+     *
+     * 상태 변경 의도는 엔티티 필드가 아닌 별도 파라미터로 전달받는다.
+     * (Reservation의 status는 @Builder.Default로 항상 non-null이라 엔티티만으로는
+     * "변경 의도 없음"을 구분할 수 없으므로 newStatus가 null이면 기존 상태를 유지한다.)
      */
     @Transactional
-    public Reservation updateReservation(UUID id, Reservation updatedReservation) {
+    public Reservation updateReservation(UUID id, Reservation updatedReservation, Reservation.ReservationStatus newStatus) {
         Reservation existing = getReservationById(id);
 
         // 날짜/시간 변경 여부 확인
@@ -213,9 +217,9 @@ public class ReservationService {
         if (updatedReservation.getReservationTime() != null) {
             existing.setReservationTime(updatedReservation.getReservationTime());
         }
-        if (updatedReservation.getStatus() != null) {
-            validateStatusTransition(existing.getStatus(), updatedReservation.getStatus());
-            existing.setStatus(updatedReservation.getStatus());
+        if (newStatus != null) {
+            validateStatusTransition(existing.getStatus(), newStatus);
+            existing.setStatus(newStatus);
         }
         if (updatedReservation.getServiceType() != null) {
             existing.setServiceType(updatedReservation.getServiceType());

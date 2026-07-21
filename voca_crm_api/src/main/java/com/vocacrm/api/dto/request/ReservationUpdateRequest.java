@@ -1,5 +1,6 @@
 package com.vocacrm.api.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.vocacrm.api.model.Reservation.ReservationStatus;
 import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
@@ -17,6 +18,7 @@ import java.time.LocalTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class ReservationUpdateRequest {
 
     @NotNull(message = "예약 날짜는 필수입니다")

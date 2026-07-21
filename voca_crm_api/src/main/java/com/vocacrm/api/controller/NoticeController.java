@@ -91,15 +91,18 @@ public class NoticeController {
      *
      * @param noticeId 공지사항 ID
      * @param requestBody userId, doNotShowAgain 포함
+     * @param servletRequest HttpServletRequest (JWT에서 추출한 정보 포함)
      * @return 성공 응답 (HTTP 200 OK)
      */
     @PostMapping("/notices/{noticeId}/view")
     public ResponseEntity<Map<String, String>> recordView(
             @PathVariable String noticeId,
-            @Valid @RequestBody NoticeViewRequest request) {
+            @Valid @RequestBody NoticeViewRequest request,
+            jakarta.servlet.http.HttpServletRequest servletRequest) {
+        String userId = (String) servletRequest.getAttribute("userId");
 
         noticeService.recordView(
-                request.getUserId(),
+                userId,
                 noticeId,
                 request.getDoNotShowAgain() != null && request.getDoNotShowAgain());
 

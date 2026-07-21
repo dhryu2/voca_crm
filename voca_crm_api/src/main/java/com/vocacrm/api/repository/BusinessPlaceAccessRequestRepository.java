@@ -77,6 +77,15 @@ public interface BusinessPlaceAccessRequestRepository extends JpaRepository<Busi
      */
     void deleteByUserId(UUID userId);
 
+    /**
+     * 사용자가 처리(승인/거절)한 요청의 processed_by를 NULL로 설정 (회원 탈퇴 시 사용)
+     *
+     * processed_by는 RESTRICT FK이므로 탈퇴 전 정리하지 않으면 FK 위반이 발생한다.
+     */
+    @Modifying
+    @Query("UPDATE BusinessPlaceAccessRequest r SET r.processedBy = null WHERE r.processedBy = :userId")
+    int clearProcessedByByUserId(@Param("userId") UUID userId);
+
     // ===== 사업장 삭제 관련 메서드 =====
 
     /**

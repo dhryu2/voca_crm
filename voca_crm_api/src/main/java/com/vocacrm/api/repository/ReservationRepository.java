@@ -176,6 +176,29 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
     @Query("UPDATE Reservation r SET r.createdBy = null WHERE r.businessPlaceId = :businessPlaceId AND r.createdBy = :userId")
     int clearCreatedByByBusinessPlaceIdAndUserId(@Param("businessPlaceId") String businessPlaceId, @Param("userId") UUID userId);
 
+    /**
+     * 특정 사업장에서 특정 사용자의 updated_by를 NULL로 설정
+     */
+    @Modifying
+    @Query("UPDATE Reservation r SET r.updatedBy = null WHERE r.businessPlaceId = :businessPlaceId AND r.updatedBy = :userId")
+    int clearUpdatedByByBusinessPlaceIdAndUserId(@Param("businessPlaceId") String businessPlaceId, @Param("userId") UUID userId);
+
+    // ===== 사용자 참조 정리 (회원 탈퇴 시 전역 정리, 사업장 무관) =====
+
+    /**
+     * 사업장과 무관하게 특정 사용자의 created_by를 NULL로 설정
+     */
+    @Modifying
+    @Query("UPDATE Reservation r SET r.createdBy = null WHERE r.createdBy = :userId")
+    int clearCreatedByByUserId(@Param("userId") UUID userId);
+
+    /**
+     * 사업장과 무관하게 특정 사용자의 updated_by를 NULL로 설정
+     */
+    @Modifying
+    @Query("UPDATE Reservation r SET r.updatedBy = null WHERE r.updatedBy = :userId")
+    int clearUpdatedByByUserId(@Param("userId") UUID userId);
+
     // ===== 사업장 삭제 관련 메서드 =====
 
     /**

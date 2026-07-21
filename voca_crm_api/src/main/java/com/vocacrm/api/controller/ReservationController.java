@@ -290,11 +290,11 @@ public class ReservationController {
         reservation.setNotes(request.getNotes());
         reservation.setRemark(request.getRemark());
         reservation.setUpdatedBy(UUID.fromString(userId));
-        if (request.getStatus() != null) {
-            reservation.setStatus(request.getStatus());
-        }
 
-        Reservation updated = reservationService.updateReservation(UUID.fromString(id), reservation);
+        // status 변경 의도는 요청 DTO 기준으로 판단해 서비스에 별도 전달한다.
+        // (request.getStatus()가 null이면 서비스가 기존 상태를 유지한다.)
+        Reservation updated = reservationService.updateReservation(
+                UUID.fromString(id), reservation, request.getStatus());
         return ResponseEntity.ok(updated);
     }
 

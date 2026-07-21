@@ -15,6 +15,7 @@ import com.vocacrm.api.repository.*;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +39,7 @@ public class BusinessPlaceService {
     private final BusinessPlaceAccessRequestRepository accessRequestRepository;
     private final FCMService fcmService;
     private final EntityManager entityManager;
+    private final AccessControlService accessControlService;
 
     // 사용자 참조 정리를 위한 Repository
     private final MemberRepository memberRepository;
@@ -45,6 +47,7 @@ public class BusinessPlaceService {
     private final ReservationRepository reservationRepository;
     private final VisitRepository visitRepository;
     private final AuditLogRepository auditLogRepository;
+    private final ErrorLogRepository errorLogRepository;
 
     private static final String ID_CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     private static final int ID_LENGTH = 7;
@@ -207,7 +210,14 @@ public class BusinessPlaceService {
                 .isReadByRequester(false)
                 .build();
 
-        BusinessPlaceAccessRequest savedRequest = accessRequestRepository.save(request);
+        // 앱레벨 중복 체크를 통과하더라도, 동시 요청 시 DB 부분 유니크 제약(ux_bpar_pending)에
+        // 걸릴 수 있다. 이 경우 500 대신 400으로 응답하기 위해 즉시 flush 후 예외를 변환한다.
+        BusinessPlaceAccessRequest savedRequest;
+        try {
+            savedRequest = accessRequestRepository.saveAndFlush(request);
+        } catch (DataIntegrityViolationException e) {
+            throw new InvalidInputException("이미 대기중인 요청이 있습니다");
+        }
 
         // Send push notification to owner (only if push notification is enabled)
         List<UserBusinessPlace> owners = userBusinessPlaceRepository.findByBusinessPlaceIdAndStatus(
@@ -523,7 +533,7 @@ public class BusinessPlaceService {
      * 이 메서드는 다음 테이블의 사용자 참조 필드를 정리합니다:
      * - Member: owner_id, last_modified_by_id, deleted_by
      * - Memo: owner_id, last_modified_by_id, deleted_by
-     * - Reservation: created_by
+     * - Reservation: created_by, updated_by
      * - Visit: visitor_id
      * - AuditLog: user_id (username은 비정규화 필드로 보존)
      *
@@ -547,6 +557,7 @@ public class BusinessPlaceService {
 
         // Reservation 테이블 정리
         int reservationCount = reservationRepository.clearCreatedByByBusinessPlaceIdAndUserId(businessPlaceId, userUuid);
+        int reservationUpdatedCount = reservationRepository.clearUpdatedByByBusinessPlaceIdAndUserId(businessPlaceId, userUuid);
 
         // Visit 테이블 정리
         int visitCount = visitRepository.clearVisitorIdByBusinessPlaceIdAndUserId(businessPlaceId, userUuid);
@@ -556,20 +567,57 @@ public class BusinessPlaceService {
 
         log.info("User references cleanup completed - Member: owner={}, modified={}, deletedBy={}, " +
                         "Memo: owner={}, modified={}, deletedBy={}, " +
-                        "Reservation: {}, Visit: {}, AuditLog: {}",
+                        "Reservation: created={}, updated={}, Visit: {}, AuditLog: {}",
                 memberOwnerCount, memberModifiedCount, memberDeletedByCount,
                 memoOwnerCount, memoModifiedCount, memoDeletedByCount,
-                reservationCount, visitCount, auditLogCount);
+                reservationCount, reservationUpdatedCount, visitCount, auditLogCount);
+    }
+
+    /**
+     * 회원 탈퇴 시 사업장 멤버십 상태와 무관하게 해당 사용자의 모든 참조를 전역으로 NULL 처리
+     *
+     * 멤버십이 강등/취소된 사업장에도 members/memos/reservations/visits/audit_logs의
+     * 사용자 참조가 남을 수 있으므로, 사업장 단위(cleanupUserReferences)가 아닌
+     * 사용자 단위로 전역 정리하여 delete(user) 시 RESTRICT FK 위반을 방지합니다.
+     *
+     * @param userId 탈퇴하는 사용자 ID
+     */
+    @Transactional
+    public void cleanupUserReferencesGlobal(String userId) {
+        log.info("Cleaning up global user references for userId: {}", userId);
+        UUID userUuid = UUID.fromString(userId);
+
+        // Member 테이블 정리
+        int memberOwnerCount = memberRepository.clearOwnerIdByUserId(userUuid);
+        int memberModifiedCount = memberRepository.clearLastModifiedByIdByUserId(userUuid);
+        int memberDeletedByCount = memberRepository.clearDeletedByByUserId(userUuid);
+
+        // Memo 테이블 정리
+        int memoOwnerCount = memoRepository.clearOwnerIdByUserId(userUuid);
+        int memoModifiedCount = memoRepository.clearLastModifiedByIdByUserId(userUuid);
+        int memoDeletedByCount = memoRepository.clearDeletedByByUserId(userUuid);
+
+        // Reservation 테이블 정리
+        int reservationCount = reservationRepository.clearCreatedByByUserId(userUuid);
+        int reservationUpdatedCount = reservationRepository.clearUpdatedByByUserId(userUuid);
+
+        // Visit 테이블 정리
+        int visitCount = visitRepository.clearVisitorIdByUserId(userUuid);
+
+        // AuditLog 테이블 정리
+        int auditLogCount = auditLogRepository.clearUserIdByUserId(userUuid);
+
+        log.info("Global user references cleanup completed - Member: owner={}, modified={}, deletedBy={}, " +
+                        "Memo: owner={}, modified={}, deletedBy={}, " +
+                        "Reservation: created={}, updated={}, Visit: {}, AuditLog: {}",
+                memberOwnerCount, memberModifiedCount, memberDeletedByCount,
+                memoOwnerCount, memoModifiedCount, memoDeletedByCount,
+                reservationCount, reservationUpdatedCount, visitCount, auditLogCount);
     }
 
     @Transactional
     public BusinessPlace updateBusinessPlace(String id, BusinessPlace businessPlace, String userId) {
-        UserBusinessPlace ubp = userBusinessPlaceRepository.findByUserIdAndBusinessPlaceId(UUID.fromString(userId), id)
-                .orElseThrow(() -> new AccessDeniedException("사업장 접근 권한이 없습니다"));
-
-        if (ubp.getRole() != Role.OWNER) {
-            throw new AccessDeniedException("OWNER만 사업장 정보를 수정할 수 있습니다");
-        }
+        accessControlService.requireRole(userId, id, Role.OWNER);
 
         BusinessPlace existing = businessPlaceRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("사업장을 찾을 수 없습니다"));
@@ -589,8 +637,7 @@ public class BusinessPlaceService {
 
     @Transactional
     public SetDefaultBusinessPlaceResponse setDefaultBusinessPlace(String userId, String businessPlaceId) {
-        userBusinessPlaceRepository.findByUserIdAndBusinessPlaceId(UUID.fromString(userId), businessPlaceId)
-                .orElseThrow(() -> new AccessDeniedException("사업장 접근 권한이 없습니다"));
+        accessControlService.requireApprovedMembership(userId, businessPlaceId);
 
         User user = userRepository.findById(UUID.fromString(userId))
                 .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다"));
@@ -609,9 +656,8 @@ public class BusinessPlaceService {
      * @return 멤버 목록 (OWNER가 맨 앞, 나머지는 가입일순)
      */
     public List<BusinessPlaceMemberDTO> getBusinessPlaceMembers(String businessPlaceId, String requesterId) {
-        // 요청자가 해당 사업장의 멤버인지 확인
-        userBusinessPlaceRepository.findByUserIdAndBusinessPlaceId(UUID.fromString(requesterId), businessPlaceId)
-                .orElseThrow(() -> new AccessDeniedException("권한이 없습니다"));
+        // 요청자가 해당 사업장의 APPROVED 멤버인지 확인
+        accessControlService.requireApprovedMembership(requesterId, businessPlaceId);
 
         List<UserBusinessPlace> members = userBusinessPlaceRepository.findByBusinessPlaceIdAndStatus(
                 businessPlaceId, AccessStatus.APPROVED);
@@ -645,13 +691,7 @@ public class BusinessPlaceService {
                 .orElseThrow(() -> new ResourceNotFoundException("멤버를 찾을 수 없습니다"));
 
         // 요청자가 Owner인지 확인
-        UserBusinessPlace ownerUbp = userBusinessPlaceRepository
-                .findByUserIdAndBusinessPlaceId(UUID.fromString(ownerId), targetUbp.getBusinessPlaceId())
-                .orElseThrow(() -> new AccessDeniedException("권한이 없습니다"));
-
-        if (ownerUbp.getRole() != Role.OWNER) {
-            throw new AccessDeniedException("Owner만 역할을 변경할 수 있습니다");
-        }
+        accessControlService.requireRole(ownerId, targetUbp.getBusinessPlaceId(), Role.OWNER);
 
         // OWNER 역할로는 변경 불가
         if (newRole == Role.OWNER) {
@@ -689,13 +729,7 @@ public class BusinessPlaceService {
 
         UUID ownerUuid = UUID.fromString(ownerId);
         // 요청자가 Owner인지 확인
-        UserBusinessPlace ownerUbp = userBusinessPlaceRepository
-                .findByUserIdAndBusinessPlaceId(ownerUuid, targetUbp.getBusinessPlaceId())
-                .orElseThrow(() -> new AccessDeniedException("권한이 없습니다"));
-
-        if (ownerUbp.getRole() != Role.OWNER) {
-            throw new AccessDeniedException("Owner만 멤버를 삭제할 수 있습니다");
-        }
+        accessControlService.requireRole(ownerId, targetUbp.getBusinessPlaceId(), Role.OWNER);
 
         // 본인(Owner)은 삭제 불가
         if (targetUbp.getUserId().equals(ownerUuid)) {
@@ -744,12 +778,7 @@ public class BusinessPlaceService {
                 .orElseThrow(() -> new ResourceNotFoundException("사업장을 찾을 수 없습니다"));
 
         // Owner 권한 확인
-        UserBusinessPlace ubp = userBusinessPlaceRepository.findByUserIdAndBusinessPlaceId(UUID.fromString(userId), businessPlaceId)
-                .orElseThrow(() -> new AccessDeniedException("권한이 없습니다"));
-
-        if (ubp.getRole() != Role.OWNER) {
-            throw new AccessDeniedException("Owner만 사업장을 삭제할 수 있습니다");
-        }
+        accessControlService.requireRole(userId, businessPlaceId, Role.OWNER);
 
         // 각 테이블의 데이터 개수 조회
         long memberCount = memberRepository.countByBusinessPlaceId(businessPlaceId);
@@ -803,12 +832,7 @@ public class BusinessPlaceService {
                 .orElseThrow(() -> new ResourceNotFoundException("사업장을 찾을 수 없습니다"));
 
         // Owner 권한 확인
-        UserBusinessPlace ubp = userBusinessPlaceRepository.findByUserIdAndBusinessPlaceId(UUID.fromString(userId), businessPlaceId)
-                .orElseThrow(() -> new AccessDeniedException("권한이 없습니다"));
-
-        if (ubp.getRole() != Role.OWNER) {
-            throw new AccessDeniedException("Owner만 사업장을 삭제할 수 있습니다");
-        }
+        accessControlService.requireRole(userId, businessPlaceId, Role.OWNER);
 
         // 사업장 이름 확인 (Type-to-Confirm)
         if (!businessPlace.getName().equals(confirmName)) {
@@ -843,6 +867,10 @@ public class BusinessPlaceService {
         // 5. AuditLogs 삭제
         int deletedAuditLogs = auditLogRepository.deleteAllByBusinessPlaceId(businessPlaceId);
         log.debug("Deleted {} audit logs", deletedAuditLogs);
+
+        // 5-1. ErrorLogs 삭제 (고아 레코드 방지, FK 없음)
+        int deletedErrorLogs = errorLogRepository.deleteAllByBusinessPlaceId(businessPlaceId);
+        log.debug("Deleted {} error logs", deletedErrorLogs);
 
         // 6. Members 삭제
         int deletedMembers = memberRepository.deleteAllByBusinessPlaceId(businessPlaceId);

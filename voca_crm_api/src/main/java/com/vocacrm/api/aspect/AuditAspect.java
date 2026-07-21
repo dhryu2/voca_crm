@@ -128,18 +128,6 @@ public class AuditAspect {
     }
 
     /**
-     * Member 컨트롤러의 삭제 메서드 감사
-     */
-    @AfterReturning(
-            pointcut = "execution(* com.vocacrm.api.controller.MemberController.deleteMember(..))",
-            returning = "result"
-    )
-    public void auditMemberDelete(JoinPoint joinPoint, Object result) {
-        String memberId = extractIdFromArgs(joinPoint.getArgs(), "id");
-        logControllerAction(joinPoint, result, AuditAction.DELETE, "MEMBER", "회원 삭제", memberId);
-    }
-
-    /**
      * Member 컨트롤러의 복원 메서드 감사
      */
     @AfterReturning(

@@ -457,7 +457,7 @@ public class AuditLogService {
             Map<String, Object> stat = new HashMap<>();
             stat.put("userId", row[0]);
             stat.put("username", row[1]);
-            stat.put("actionCount", row[2]);
+            stat.put("activityCount", row[2]);
             return stat;
         }).toList();
     }

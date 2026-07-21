@@ -41,7 +41,7 @@ public class AuditLog {
     /**
      * 작업을 수행한 사용자 ID
      */
-    @Column(name = "user_id", nullable = false)
+    @Column(name = "user_id")
     private UUID userId;
 
     /**

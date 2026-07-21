@@ -292,18 +292,6 @@ public class MemberService {
         memberRepository.deleteById(UUID.fromString(id));
     }
 
-    /**
-     * Ownership 기반 권한 체크 후 회원 삭제 (hard delete)
-     * @deprecated Soft Delete 사용 권장 - softDeleteMember 사용
-     */
-    @Transactional
-    @Deprecated
-    public void deleteMemberWithPermission(String id, String requestUserId, String businessPlaceId) {
-        Member member = getMemberById(id);
-        checkPermissionForDelete(member.getOwnerId(), requestUserId, member.getBusinessPlaceId());
-        memberRepository.deleteById(UUID.fromString(id));
-    }
-
     // ===== Soft Delete 관련 메서드 =====
 
     /**

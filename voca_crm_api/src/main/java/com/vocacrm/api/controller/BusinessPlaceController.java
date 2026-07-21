@@ -176,7 +176,7 @@ public class BusinessPlaceController {
     }
 
     /**
-     * 요청 삭제 (요청자만 가능, PENDING만)
+     * 요청 삭제 (요청자만 가능, PENDING 취소 또는 처리 완료 이력 삭제)
      */
     @DeleteMapping("/requests/{id}")
     public ResponseEntity<Void> deleteRequest(

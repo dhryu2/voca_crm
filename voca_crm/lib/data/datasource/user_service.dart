@@ -72,7 +72,7 @@ class UserService {
   }) async {
     final response = await _apiClient.put(
       '/api/users/$userId/push-notification',
-      queryParams: {'enabled': enabled.toString()},
+      body: {'enabled': enabled},
     );
 
     if (response.statusCode == 200) {
@@ -89,7 +89,7 @@ class UserService {
   }) async {
     final response = await _apiClient.put(
       '/api/users/$userId/fcm-token',
-      queryParams: {'fcmToken': fcmToken},
+      body: {'fcmToken': fcmToken},
     );
 
     if (response.statusCode == 200) {

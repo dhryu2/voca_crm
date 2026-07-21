@@ -1,6 +1,7 @@
 package com.vocacrm.api.service;
 
 import com.vocacrm.api.exception.InvalidInputException;
+import com.vocacrm.api.exception.ResourceNotFoundException;
 import com.vocacrm.api.model.AccessStatus;
 import com.vocacrm.api.model.Role;
 import com.vocacrm.api.model.User;
@@ -50,7 +51,7 @@ public class UserService {
     @Transactional
     public void deleteUser(String userId) {
         User user = userRepository.findById(UUID.fromString(userId))
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다: " + userId));
 
         log.info("Starting user deletion process for userId: {}", userId);
 
@@ -63,14 +64,9 @@ public class UserService {
             throw new InvalidInputException("소유한 사업장이 있어 계정을 삭제할 수 없습니다. 먼저 사업장을 삭제하거나 소유권을 이전한 뒤 다시 시도해주세요.");
         }
 
-        // 1. 사용자가 등록된 모든 사업장에서 참조 정리
-        List<UserBusinessPlace> userBusinessPlaces = userBusinessPlaceRepository.findByUserIdAndStatus(
-                userUuid, AccessStatus.APPROVED);
-
-        for (UserBusinessPlace ubp : userBusinessPlaces) {
-            log.info("Cleaning up user references in businessPlaceId: {}", ubp.getBusinessPlaceId());
-            businessPlaceService.cleanupUserReferences(ubp.getBusinessPlaceId(), userId);
-        }
+        // 1. 사용자의 모든 참조를 전역으로 정리 (멤버십 상태와 무관)
+        // 강등/취소된 사업장에 남은 참조까지 정리해 delete(user) 시 RESTRICT FK 위반 방지
+        businessPlaceService.cleanupUserReferencesGlobal(userId);
 
         // 2. UserBusinessPlace 레코드 삭제 (모든 상태)
         List<UserBusinessPlace> allUserBusinessPlaces = userBusinessPlaceRepository.findByUserId(userUuid);
@@ -80,6 +76,10 @@ public class UserService {
         // 3. 사용자가 보낸 접근 요청 삭제
         accessRequestRepository.deleteByUserId(userUuid);
         log.info("Deleted access requests for userId: {}", userId);
+
+        // 3-1. 사용자가 처리한 접근 요청의 processed_by 정리 (RESTRICT FK 위반 방지)
+        int clearedProcessedBy = accessRequestRepository.clearProcessedByByUserId(userUuid);
+        log.info("Cleared processed_by for {} access requests processed by userId: {}", clearedProcessedBy, userId);
 
         // 4. 모든 Refresh Token 폐기
         refreshTokenService.revokeAllUserTokens(userId);

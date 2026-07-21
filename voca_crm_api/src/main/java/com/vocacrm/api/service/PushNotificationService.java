@@ -1,6 +1,7 @@
 package com.vocacrm.api.service;
 
 import com.google.firebase.messaging.*;
+import com.vocacrm.api.exception.AccessDeniedException;
 import com.vocacrm.api.model.DeviceToken;
 import com.vocacrm.api.model.NotificationLog;
 import com.vocacrm.api.model.NotificationLog.NotificationStatus;
@@ -82,7 +83,14 @@ public class PushNotificationService {
      * FCM 토큰 비활성화 (로그아웃 시)
      */
     @Transactional
-    public void deactivateToken(String fcmToken) {
+    public void deactivateToken(String userId, String fcmToken) {
+        Optional<DeviceToken> existing = deviceTokenRepository.findByFcmToken(fcmToken);
+        if (existing.isEmpty()) {
+            return;
+        }
+        if (!existing.get().getUserId().equals(UUID.fromString(userId))) {
+            throw new AccessDeniedException("해당 토큰에 대한 접근 권한이 없습니다.");
+        }
         deviceTokenRepository.deactivateByFcmToken(fcmToken);
     }
 

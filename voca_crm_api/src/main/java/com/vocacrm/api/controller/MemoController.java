@@ -488,7 +488,7 @@ public class MemoController {
      * - id: 삭제할 메모의 UUID
      *
      * Required Headers:
-     * - X-User-Id: 요청자 사용자 ID
+     * - Authorization: Bearer {JWT token}
      * - X-Business-Place-Id: 사업장 ID
      *
      * 권한 규칙:
@@ -498,16 +498,17 @@ public class MemoController {
      * - STAFF: MANAGER 이상이 수정한 메모 삭제 불가
      *
      * @param id 삭제할 메모의 UUID
-     * @param requestUserId 요청자 사용자 ID
      * @param businessPlaceId 사업장 ID
+     * @param servletRequest HttpServletRequest (JWT에서 추출한 정보 포함)
      * @return 삭제된 메모 정보 (HTTP 200 OK)
      */
     @DeleteMapping("/{id}/soft")
     public ResponseEntity<Memo> softDeleteMemo(
             @PathVariable String id,
-            @RequestHeader("X-User-Id") String requestUserId,
-            @RequestHeader("X-Business-Place-Id") String businessPlaceId) {
+            @RequestHeader("X-Business-Place-Id") String businessPlaceId,
+            jakarta.servlet.http.HttpServletRequest servletRequest) {
 
+        String requestUserId = (String) servletRequest.getAttribute("userId");
         Memo deleted = memoService.softDeleteMemo(id, requestUserId, businessPlaceId);
         return ResponseEntity.ok(deleted);
     }
@@ -599,22 +600,23 @@ public class MemoController {
      * - id: 복원할 메모의 UUID
      *
      * Required Headers:
-     * - X-User-Id: 요청자 사용자 ID
+     * - Authorization: Bearer {JWT token}
      * - X-Business-Place-Id: 사업장 ID
      *
      * 권한: MANAGER 이상만 복원 가능
      *
      * @param id 복원할 메모의 UUID
-     * @param requestUserId 요청자 사용자 ID
      * @param businessPlaceId 사업장 ID
+     * @param servletRequest HttpServletRequest (JWT에서 추출한 정보 포함)
      * @return 복원된 메모 정보 (HTTP 200 OK)
      */
     @PostMapping("/{id}/restore")
     public ResponseEntity<Memo> restoreMemo(
             @PathVariable String id,
-            @RequestHeader("X-User-Id") String requestUserId,
-            @RequestHeader("X-Business-Place-Id") String businessPlaceId) {
+            @RequestHeader("X-Business-Place-Id") String businessPlaceId,
+            jakarta.servlet.http.HttpServletRequest servletRequest) {
 
+        String requestUserId = (String) servletRequest.getAttribute("userId");
         Memo restored = memoService.restoreMemo(id, requestUserId, businessPlaceId);
         return ResponseEntity.ok(restored);
     }
@@ -629,7 +631,7 @@ public class MemoController {
      * - id: 영구 삭제할 메모의 UUID
      *
      * Required Headers:
-     * - X-User-Id: 요청자 사용자 ID
+     * - Authorization: Bearer {JWT token}
      * - X-Business-Place-Id: 사업장 ID
      *
      * 권한: MANAGER 이상만 영구 삭제 가능
@@ -639,16 +641,17 @@ public class MemoController {
      * - 영구 삭제된 메모는 복구할 수 없습니다
      *
      * @param id 영구 삭제할 메모의 UUID
-     * @param requestUserId 요청자 사용자 ID
      * @param businessPlaceId 사업장 ID
+     * @param servletRequest HttpServletRequest (JWT에서 추출한 정보 포함)
      * @return 응답 본문 없음 (HTTP 204 No Content)
      */
     @DeleteMapping("/{id}/permanent")
     public ResponseEntity<Void> permanentDeleteMemo(
             @PathVariable String id,
-            @RequestHeader("X-User-Id") String requestUserId,
-            @RequestHeader("X-Business-Place-Id") String businessPlaceId) {
+            @RequestHeader("X-Business-Place-Id") String businessPlaceId,
+            jakarta.servlet.http.HttpServletRequest servletRequest) {
 
+        String requestUserId = (String) servletRequest.getAttribute("userId");
         memoService.permanentDeleteMemo(id, requestUserId, businessPlaceId);
         return ResponseEntity.noContent().build();
     }

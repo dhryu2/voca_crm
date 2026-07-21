@@ -64,7 +64,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         // 공개 엔드포인트는 토큰 검증 없이 통과
-        if (isPublicEndpoint(requestURI)) {
+        if (isPublicEndpoint(requestURI, method)) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -116,9 +116,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     /**
      * 공개 엔드포인트인지 확인
      */
-    private boolean isPublicEndpoint(String requestURI) {
+    private boolean isPublicEndpoint(String requestURI, String method) {
         // 정확한 매칭
         if (PUBLIC_ENDPOINTS.contains(requestURI)) {
+            return true;
+        }
+
+        // 비로그인 상태에서도 오류 로그를 수집해야 하므로 POST /api/error-logs만 공개
+        if ("POST".equalsIgnoreCase(method) && "/api/error-logs".equals(requestURI)) {
             return true;
         }
 

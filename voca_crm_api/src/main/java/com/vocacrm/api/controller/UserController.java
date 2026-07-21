@@ -1,5 +1,7 @@
 package com.vocacrm.api.controller;
 
+import com.vocacrm.api.dto.request.FcmTokenUpdateRequest;
+import com.vocacrm.api.dto.request.PushNotificationUpdateRequest;
 import com.vocacrm.api.dto.request.UserUpdateRequest;
 import com.vocacrm.api.exception.AccessDeniedException;
 import com.vocacrm.api.exception.ResourceNotFoundException;
@@ -117,7 +119,7 @@ public class UserController {
     @PutMapping("/{id}/fcm-token")
     public ResponseEntity<User> updateFcmToken(
             @PathVariable String id,
-            @RequestParam String fcmToken,
+            @Valid @RequestBody FcmTokenUpdateRequest request,
             HttpServletRequest servletRequest) {
         String requestUserId = (String) servletRequest.getAttribute("userId");
 
@@ -129,7 +131,7 @@ public class UserController {
         User user = userRepository.findById(UUID.fromString(id))
                 .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
 
-        user.setFcmToken(fcmToken);
+        user.setFcmToken(request.getFcmToken());
         User updated = userRepository.save(user);
         return ResponseEntity.ok(updated);
     }
@@ -137,7 +139,7 @@ public class UserController {
     @PutMapping("/{id}/push-notification")
     public ResponseEntity<User> updatePushNotificationSetting(
             @PathVariable String id,
-            @RequestParam Boolean enabled,
+            @Valid @RequestBody PushNotificationUpdateRequest request,
             HttpServletRequest servletRequest) {
         String requestUserId = (String) servletRequest.getAttribute("userId");
 
@@ -149,7 +151,7 @@ public class UserController {
         User user = userRepository.findById(UUID.fromString(id))
                 .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
 
-        user.setPushNotificationEnabled(enabled);
+        user.setPushNotificationEnabled(request.getEnabled());
         User updated = userRepository.save(user);
         return ResponseEntity.ok(updated);
     }

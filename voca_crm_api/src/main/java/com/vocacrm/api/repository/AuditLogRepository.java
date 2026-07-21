@@ -151,6 +151,15 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
     @Query("UPDATE AuditLog a SET a.userId = null WHERE a.businessPlaceId = :businessPlaceId AND a.userId = :userId")
     int clearUserIdByBusinessPlaceIdAndUserId(@Param("businessPlaceId") String businessPlaceId, @Param("userId") UUID userId);
 
+    /**
+     * 사업장과 무관하게 특정 사용자의 user_id를 NULL로 설정 (회원 탈퇴 시 전역 정리)
+     *
+     * 주의: username은 비정규화된 필드로 보존하여 감사 로그의 가독성을 유지합니다.
+     */
+    @Modifying
+    @Query("UPDATE AuditLog a SET a.userId = null WHERE a.userId = :userId")
+    int clearUserIdByUserId(@Param("userId") UUID userId);
+
     // ===== 사업장 삭제 관련 메서드 =====
 
     /**

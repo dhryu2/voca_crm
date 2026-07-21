@@ -55,6 +55,13 @@ public interface VisitRepository extends JpaRepository<Visit, UUID> {
            "AND v.visitorId = :userId")
     int clearVisitorIdByBusinessPlaceIdAndUserId(@Param("businessPlaceId") String businessPlaceId, @Param("userId") UUID userId);
 
+    /**
+     * 사업장과 무관하게 특정 사용자의 visitor_id를 NULL로 설정 (회원 탈퇴 시 전역 정리)
+     */
+    @Modifying
+    @Query("UPDATE Visit v SET v.visitorId = null WHERE v.visitorId = :userId")
+    int clearVisitorIdByUserId(@Param("userId") UUID userId);
+
     // ===== 오늘 방문 조회 =====
 
     /**

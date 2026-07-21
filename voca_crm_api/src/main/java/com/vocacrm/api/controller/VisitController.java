@@ -1,5 +1,6 @@
 package com.vocacrm.api.controller;
 
+import com.vocacrm.api.dto.TodayVisitResponse;
 import com.vocacrm.api.exception.AccessDeniedException;
 import com.vocacrm.api.model.AccessStatus;
 import com.vocacrm.api.model.Visit;
@@ -78,7 +79,7 @@ public class VisitController {
      * - Authorization: Bearer {JWT token}
      */
     @GetMapping("/today/{businessPlaceId}")
-    public ResponseEntity<List<Visit>> getTodayVisits(
+    public ResponseEntity<List<TodayVisitResponse>> getTodayVisits(
             @PathVariable String businessPlaceId,
             HttpServletRequest servletRequest) {
         String userId = (String) servletRequest.getAttribute("userId");
@@ -87,7 +88,10 @@ public class VisitController {
         validateUserAccessToBusinessPlace(userId, businessPlaceId);
 
         List<Visit> visits = visitService.getTodayVisits(businessPlaceId);
-        return ResponseEntity.ok(visits);
+        List<TodayVisitResponse> response = visits.stream()
+                .map(TodayVisitResponse::from)
+                .toList();
+        return ResponseEntity.ok(response);
     }
 
     /**

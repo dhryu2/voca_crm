@@ -281,6 +281,29 @@ public interface MemoRepository extends JpaRepository<Memo, UUID> {
     @Query("UPDATE Memo m SET m.deletedBy = null WHERE m.member.businessPlaceId = :businessPlaceId AND m.deletedBy = :userId")
     int clearDeletedByByBusinessPlaceIdAndUserId(@Param("businessPlaceId") String businessPlaceId, @Param("userId") UUID userId);
 
+    // ===== 사용자 참조 정리 (회원 탈퇴 시 전역 정리, 사업장 무관) =====
+
+    /**
+     * 사업장과 무관하게 특정 사용자의 owner_id를 NULL로 설정
+     */
+    @Modifying
+    @Query("UPDATE Memo m SET m.ownerId = null WHERE m.ownerId = :userId")
+    int clearOwnerIdByUserId(@Param("userId") UUID userId);
+
+    /**
+     * 사업장과 무관하게 특정 사용자의 last_modified_by_id를 NULL로 설정
+     */
+    @Modifying
+    @Query("UPDATE Memo m SET m.lastModifiedById = null WHERE m.lastModifiedById = :userId")
+    int clearLastModifiedByIdByUserId(@Param("userId") UUID userId);
+
+    /**
+     * 사업장과 무관하게 특정 사용자의 deleted_by를 NULL로 설정
+     */
+    @Modifying
+    @Query("UPDATE Memo m SET m.deletedBy = null WHERE m.deletedBy = :userId")
+    int clearDeletedByByUserId(@Param("userId") UUID userId);
+
     // ===== 사업장 삭제 관련 메서드 =====
 
     /**
