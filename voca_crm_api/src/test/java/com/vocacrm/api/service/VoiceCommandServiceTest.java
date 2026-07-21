@@ -356,18 +356,17 @@ class VoiceCommandServiceTest {
     }
 
     @Test
-    void member_getAll_userId없으면_getAllMembers로_조회한다() {
+    void member_getAll_사업장없으면_전역조회하지_않고_거부한다() {
+        // WB-04: 사업장 미지정 시 전역(getAllMembers) 폴백은 타 사업장 회원 노출(테넌트 격리 위반) → 거부
         VoiceCommandRequest request = new VoiceCommandRequest();
         request.setText("전체 회원");
         when(aiServerClient.analyzeCommand("전체 회원"))
                 .thenReturn(List.of(aiResult("MEMBER", "GET_ALL", Map.of())));
-        when(memberService.getAllMembers(0, 100))
-                .thenReturn(List.of(buildMember(MEMBER_ID, "홍길동", "1001", null)));
 
         VoiceCommandResponse response = voiceCommandService.processNewCommand(request);
 
-        assertThat(response.getStatus()).isEqualTo("completed");
-        assertThat(response.getMessage()).contains("1명");
+        assertThat(response.getStatus()).isEqualTo("error");
+        assertThat(response.getErrorCode()).isEqualTo("NO_BUSINESS_PLACE");
     }
 
     // ===== [D] MEMO 카테고리 라우팅 =====
@@ -929,14 +928,12 @@ class VoiceCommandServiceTest {
     }
 
     @Test
-    void dailyBriefing_사업장없으면_전체회원기준으로_처리한다() {
-        when(memberService.getAllMembers(0, 1000)).thenReturn(List.of());
-
+    void dailyBriefing_사업장없으면_전역조회하지_않고_거부한다() {
+        // WB-04: 사업장 미지정 시 전체회원 폴백은 타 사업장 회원명·중요메모 노출 → 거부
         VoiceCommandResponse response = voiceCommandService.generateDailyBriefing(USER_ID, null);
 
-        assertThat(response.getStatus()).isEqualTo("completed");
-        assertThat(response.getMessage()).contains("오늘 예약은 총 0건");
-        assertThat(response.getMessage()).contains("중요 메모는 0개");
+        assertThat(response.getStatus()).isEqualTo("error");
+        assertThat(response.getErrorCode()).isEqualTo("NO_BUSINESS_PLACE");
     }
 
     // ===== Helpers =====

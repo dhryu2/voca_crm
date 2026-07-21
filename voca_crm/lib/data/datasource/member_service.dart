@@ -105,10 +105,11 @@ class MemberService {
         return data.map((json) => MemberModel.fromJson(json as Map<String, dynamic>)).toList();
       }
       developer.log('[MemberService] Non-200 response');
-      return [];
+      throw MemberServiceException('회원 목록 조회 실패 (status: ${response.statusCode})');
     } catch (e) {
+      // 오류를 삼켜 빈 목록으로 숨기지 않는다 — 호출 화면(CustomersScreen)이 에러 상태를 표시하도록 전파(WB-16, fail-fast)
       developer.log('[MemberService] Error: $e');
-      return [];
+      rethrow;
     }
   }
 
@@ -182,31 +183,8 @@ class MemberService {
     }
   }
 
-  /// 회원 삭제
-  /// [userId]: 요청자 사용자 ID (권한 체크용)
-  /// [businessPlaceId]: 사업장 ID (권한 체크용)
-  Future<void> deleteMember(
-    String id, {
-    String? userId,
-    String? businessPlaceId,
-  }) async {
-    final additionalHeaders = <String, String>{
-      if (userId != null) 'X-User-Id': userId,
-      if (businessPlaceId != null) 'X-Business-Place-Id': businessPlaceId,
-    };
-
-    final response = await _apiClient.delete(
-      '/api/members/$id',
-      additionalHeaders: additionalHeaders.isNotEmpty ? additionalHeaders : null,
-    );
-
-    if (response.statusCode != 200 && response.statusCode != 204) {
-      final errorData = jsonDecode(response.body);
-      throw MemberServiceException(
-        errorData['message'] ?? '회원 삭제 중 오류가 발생했습니다.',
-      );
-    }
-  }
+  // WB-13: hard-delete deleteMember 제거됨 — 서버에 DELETE /api/members/{id} 엔드포인트가 없어 404 이며,
+  // 이미 @Deprecated 로 어떤 화면도 호출하지 않던 죽은 코드였다. 삭제는 softDeleteMember/permanentDeleteMember 사용.
 
   /// 전체 회원 목록 조회
   /// 백엔드가 페이지당 최대 100건으로 제한하므로, 더 이상 조회되지 않을 때까지
@@ -222,14 +200,16 @@ class MemberService {
     const int maxPages = 1000;
 
     final List<MemberModel> allMembers = [];
-    int currentSkip = skip;
 
     try {
       for (int page = 0; page < maxPages; page++) {
+        // 서버는 'skip' 파라미터를 '페이지 번호(0부터)'로 해석한다(PageRequest.of(skip, limit)).
+        // 과거엔 skip 을 행 오프셋(+= pageSize)으로 보내, 두 번째 요청부터 존재하지 않는 페이지를 조회해
+        // 100명 초과분이 조용히 유실됐다(WB-12). 시작 페이지(skip)에서 page 만큼 증가한 '페이지 번호'를 전달한다.
         final response = await _apiClient.get(
           '/api/members',
           queryParams: {
-            'skip': currentSkip.toString(),
+            'skip': (skip + page).toString(),
             'limit': pageSize.toString(),
           },
         );
@@ -254,8 +234,6 @@ class MemberService {
         if (data.length < pageSize) {
           break;
         }
-
-        currentSkip += pageSize;
       }
       return allMembers;
     } catch (e) {

@@ -49,9 +49,10 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
      * StatisticsService.getTodaySchedule()에서 사용
      */
     @Query("SELECT r FROM Reservation r " +
-           "LEFT JOIN FETCH r.member " +
+           "LEFT JOIN FETCH r.member m " +
            "WHERE r.businessPlaceId = :businessPlaceId " +
            "AND r.reservationDate = :reservationDate " +
+           "AND m.isDeleted = false " +   // 삭제 대기(soft-delete) 회원의 예약은 오늘 일정에서 제외 (회원 복원 시 자동 복귀)
            "ORDER BY r.reservationTime ASC")
     List<Reservation> findByBusinessPlaceIdAndReservationDateWithMember(
             @Param("businessPlaceId") String businessPlaceId,
@@ -100,8 +101,10 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
     /**
      * 오늘 예약 개수 조회
      */
-    @Query("SELECT COUNT(r) FROM Reservation r WHERE r.businessPlaceId = :businessPlaceId " +
-           "AND r.reservationDate = CURRENT_DATE AND r.status IN ('PENDING', 'CONFIRMED')")
+    @Query("SELECT COUNT(r) FROM Reservation r JOIN Member m ON m.id = r.memberId " +
+           "WHERE r.businessPlaceId = :businessPlaceId " +
+           "AND r.reservationDate = CURRENT_DATE AND r.status IN ('PENDING', 'CONFIRMED') " +
+           "AND m.isDeleted = false")   // 삭제 대기 회원의 예약은 오늘 예약 수에서 제외 (get_today_visit_count 함수와 동일한 정책)
     Long countTodayReservations(@Param("businessPlaceId") String businessPlaceId);
 
     /**

@@ -88,6 +88,7 @@ public class JwtUtil {
         return Jwts.builder()
                 .subject(userId)
                 .claim("username", username)
+                .claim("type", "refresh")   // 토큰 타입 표기 — 인증 필터가 refresh 토큰을 access 로 오수락하지 못하게 함(WB-09)
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(getSigningKey())
@@ -117,10 +118,18 @@ public class JwtUtil {
                 .claim("pushNotificationEnabled", pushNotificationEnabled)
                 .claim("defaultBusinessPlaceId", defaultBusinessPlaceId)
                 .claim("isSystemAdmin", isSystemAdmin)
+                .claim("type", "access")   // 토큰 타입 표기(WB-09)
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(getSigningKey())
                 .compact();
+    }
+
+    /**
+     * 토큰 타입("access"/"refresh") 추출. 구버전 토큰(클레임 없음)은 null 을 반환한다(하위호환).
+     */
+    public String extractType(String token) {
+        return extractClaim(token, claims -> claims.get("type", String.class));
     }
 
     public String extractUserId(String token) {

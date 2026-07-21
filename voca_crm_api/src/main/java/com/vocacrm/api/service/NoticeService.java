@@ -157,27 +157,11 @@ public class NoticeService {
      */
     @Transactional
     public void recordView(String userId, String noticeId, boolean doNotShowAgain) {
-        UUID userUuid = UUID.fromString(userId);
-        UUID noticeUuid = UUID.fromString(noticeId);
-
-        // 기존 기록이 있는지 확인
-        UserNoticeView existingView = userNoticeViewRepository
-                .findByUserIdAndNoticeId(userUuid, noticeUuid)
-                .orElse(null);
-
-        if (existingView != null) {
-            // 기존 기록 업데이트
-            existingView.setDoNotShowAgain(doNotShowAgain);
-            existingView.setViewedAt(LocalDateTime.now());
-            userNoticeViewRepository.save(existingView);
-        } else {
-            // 새 기록 생성
-            UserNoticeView newView = new UserNoticeView();
-            newView.setUserId(userUuid);
-            newView.setNoticeId(noticeUuid);
-            newView.setDoNotShowAgain(doNotShowAgain);
-            userNoticeViewRepository.save(newView);
-        }
+        // 원자적 upsert(ON CONFLICT). check-then-insert 의 TOCTOU 경합(동시 최초 열람 시 uk_user_notice
+        // 위반 → 500)을 제거한다. catch-in-transaction 방식은 제약 위반이 트랜잭션을 rollback-only 로
+        // 오염시켜 동작하지 않으므로, DB 레벨 원자적 upsert 로 처리한다(WB-10).
+        userNoticeViewRepository.upsertView(
+                UUID.fromString(userId), UUID.fromString(noticeId), doNotShowAgain);
     }
 
     /**

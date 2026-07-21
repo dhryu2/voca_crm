@@ -76,6 +76,15 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.boot:spring-boot-micrometer-tracing-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // 통합테스트: 실제 PostgreSQL + Redis (Testcontainers) + 실 스키마(Flyway) + HTTP 계층(MockMvc)
+    // Spring Boot 4.0.0 의존성관리가 Testcontainers 버전을 제공하지 않으므로 BOM 을 명시적으로 임포트
+    testImplementation platform('org.testcontainers:testcontainers-bom:1.20.4')
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
+    // Spring Boot 4.0: MockMvc 테스트 슬라이스(@AutoConfigureMockMvc)가 별도 모듈로 분리됨
+    testImplementation 'org.springframework.boot:spring-boot-webmvc-test'
 }
 
 tasks.named('test') {

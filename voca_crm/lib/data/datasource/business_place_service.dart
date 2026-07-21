@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:voca_crm/core/network/api_client.dart';
 import 'package:voca_crm/core/error/exception_parser.dart';
+import 'package:voca_crm/core/utils/date_parser.dart';
 import 'package:voca_crm/domain/entity/business_place.dart';
 import 'package:voca_crm/domain/entity/business_place_deletion_preview.dart';
 import 'package:voca_crm/domain/entity/business_place_access_request.dart';
@@ -38,10 +39,10 @@ class BusinessPlaceService {
         address: data['businessPlaceAddress'],
         phone: data['businessPlacePhone'],
         createdAt: data['businessPlaceCreatedAt'] != null
-            ? DateTime.parse(data['businessPlaceCreatedAt'])
+            ? DateParser.fromServer(data['businessPlaceCreatedAt'])
             : now,
         updatedAt: data['businessPlaceCreatedAt'] != null
-            ? DateTime.parse(data['businessPlaceCreatedAt'])
+            ? DateParser.fromServer(data['businessPlaceCreatedAt'])
             : now,
       );
       final user = User(

@@ -185,8 +185,9 @@ class StatisticsServiceTest {
     @SuppressWarnings("unchecked")
     @Test
     void getMemoStatistics_통계값을_모두_집계한다() {
+        // total, important 두 번만 queryForObject 호출됨(archived 는 스키마에 컬럼이 없어 제거되고 0 고정 — WB-02)
         when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), eq(BUSINESS_PLACE_ID)))
-                .thenReturn(10, 3, 2);
+                .thenReturn(10, 3);
         when(jdbcTemplate.query(anyString(), any(RowMapper.class), eq(BUSINESS_PLACE_ID), any(LocalDate.class), any(LocalDate.class)))
                 .thenReturn(Collections.emptyList());
 
@@ -194,7 +195,8 @@ class StatisticsServiceTest {
 
         assertThat(result.getTotalMemos()).isEqualTo(10);
         assertThat(result.getImportantMemos()).isEqualTo(3);
-        assertThat(result.getArchivedMemos()).isEqualTo(2);
+        // 아카이브 기능/컬럼이 없으므로 0 (기존엔 존재하지 않는 컬럼 조회로 실DB에서 500이었음)
+        assertThat(result.getArchivedMemos()).isEqualTo(0);
         assertThat(result.getDailyMemos()).hasSize(3);
     }
 }

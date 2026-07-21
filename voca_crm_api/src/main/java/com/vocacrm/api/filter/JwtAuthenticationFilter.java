@@ -86,6 +86,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
 
+            // refresh 토큰을 access 토큰으로 오용하는 것을 차단(WB-09).
+            // 구버전 access 토큰은 type 클레임이 없어 null → 통과(하위호환). refresh 토큰만 명시적으로 거부.
+            if ("refresh".equals(jwtUtil.extractType(token))) {
+                sendUnauthorizedError(response, "유효하지 않은 토큰입니다");
+                return;
+            }
+
             // 토큰에서 사용자 정보 추출하여 요청 속성에 저장
             String userId = jwtUtil.extractUserId(token);
             String username = jwtUtil.extractUsername(token);

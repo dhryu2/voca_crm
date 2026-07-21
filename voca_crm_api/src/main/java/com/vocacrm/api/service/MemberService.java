@@ -315,8 +315,12 @@ public class MemberService {
 
         // 회원 soft delete 처리
         UUID requestUserUuid = UUID.fromString(requestUserId);
+        // 회원과, 회원과 함께 삭제되는 메모에 '동일한' deletedAt 을 부여한다.
+        // 복원 시 (deletedAt, deletedBy) 조합을 판별자로 삼아, 개별적으로 먼저 삭제됐던 메모는 건드리지 않고
+        // 회원과 함께 cascade 삭제된 메모만 복원하기 위함이다(WB-07).
+        LocalDateTime deletedAt = LocalDateTime.now();
         member.setIsDeleted(true);
-        member.setDeletedAt(LocalDateTime.now());
+        member.setDeletedAt(deletedAt);
         member.setDeletedBy(requestUserUuid);
         memberRepository.save(member);
 
@@ -324,10 +328,9 @@ public class MemberService {
         List<Memo> memos = memoRepository.findByMemberIdAndBusinessPlaceIdAndIsDeletedFalseOrderByCreatedAtDesc(
                 member.getId(), member.getBusinessPlaceId());
         if (!memos.isEmpty()) {
-            LocalDateTime now = LocalDateTime.now();
             for (Memo memo : memos) {
                 memo.setIsDeleted(true);
-                memo.setDeletedAt(now);
+                memo.setDeletedAt(deletedAt);
                 memo.setDeletedBy(requestUserUuid);
             }
             memoRepository.saveAll(memos);
@@ -431,22 +434,32 @@ public class MemberService {
         // MANAGER 이상만 복원 가능 (회원 소속 사업장 기준)
         checkManagerOrAbove(requestUserId, member.getBusinessPlaceId(), "복원");
 
+        // 복원 판별자: 클리어 전에 회원의 삭제 시각/주체를 캡처
+        LocalDateTime memberDeletedAt = member.getDeletedAt();
+        UUID memberDeletedBy = member.getDeletedBy();
+
         // 회원 복원
         member.setIsDeleted(false);
         member.setDeletedAt(null);
         member.setDeletedBy(null);
         memberRepository.save(member);
 
-        // 해당 회원의 메모도 함께 복원 (배치 저장으로 N+1 방지)
-        List<Memo> memos = memoRepository.findByMemberIdAndBusinessPlaceIdAndIsDeletedTrueOrderByDeletedAtDesc(
+        // 회원과 '함께' 삭제된 메모만 복원한다. 회원 삭제 이전에 개별적으로 삭제됐던 메모는
+        // (deletedAt, deletedBy)가 회원과 다르므로 그대로 삭제 상태를 유지한다(과잉 복원 방지 — WB-07).
+        List<Memo> deletedMemos = memoRepository.findByMemberIdAndBusinessPlaceIdAndIsDeletedTrueOrderByDeletedAtDesc(
                 member.getId(), member.getBusinessPlaceId());
-        if (!memos.isEmpty()) {
-            for (Memo memo : memos) {
+        List<Memo> toRestore = deletedMemos.stream()
+                .filter(m -> memberDeletedAt != null
+                        && memberDeletedAt.equals(m.getDeletedAt())
+                        && java.util.Objects.equals(memberDeletedBy, m.getDeletedBy()))
+                .collect(Collectors.toList());
+        if (!toRestore.isEmpty()) {
+            for (Memo memo : toRestore) {
                 memo.setIsDeleted(false);
                 memo.setDeletedAt(null);
                 memo.setDeletedBy(null);
             }
-            memoRepository.saveAll(memos);
+            memoRepository.saveAll(toRestore);
         }
 
         return member;

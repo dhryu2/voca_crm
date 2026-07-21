@@ -40,15 +40,8 @@ abstract class MemberRepository {
     String? businessPlaceId,
   });
 
-  /// Delete member (hard delete - deprecated, use softDeleteMember)
-  /// [userId]: Request user ID for permission check
-  /// [businessPlaceId]: Business place ID for permission check
-  @Deprecated('Use softDeleteMember instead')
-  Future<void> deleteMember(
-    String id, {
-    String? userId,
-    String? businessPlaceId,
-  });
+  // WB-13: hard-delete deleteMember (DELETE /api/members/{id}) 제거됨 — 서버에 해당 엔드포인트가 없어
+  // 호출 시 404 이며, 이미 @Deprecated 상태로 어떤 화면도 사용하지 않던 죽은 코드였다. 삭제는 softDeleteMember 사용.
 
   /// Get all members
   Future<List<Member>> getAllMembers();

@@ -78,7 +78,7 @@ public interface MemberRepository extends JpaRepository<Member, UUID> {
      * @return 해당 사업장의 회원 수
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT COUNT(m) FROM Member m WHERE m.businessPlaceId = :businessPlaceId")
+    @Query("SELECT COUNT(m) FROM Member m WHERE m.businessPlaceId = :businessPlaceId AND m.isDeleted = false")
     long countByBusinessPlaceIdWithLock(@Param("businessPlaceId") String businessPlaceId);
 
     /**

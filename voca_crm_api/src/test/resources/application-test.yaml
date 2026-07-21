@@ -1,0 +1,38 @@
+# 통합테스트 전용 설정 (@ActiveProfiles("test"))
+# - DataSource/Redis 접속정보는 AbstractIntegrationTest 의 Testcontainers 가 주입(@ServiceConnection / @DynamicPropertySource)
+# - 여기 값은 테스트 전용이며 실제 시크릿이 아니다. (JWT_SECRET 등 운영 값 금지)
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate   # 실제 스키마는 Flyway(V1~V6)가 구성, 엔티티 매핑만 검증
+  flyway:
+    enabled: true          # 테스트 DB 에 마이그레이션 그대로 적용
+
+# JWT: 테스트 전용 서명키(32바이트 이상). 운영 시크릿이 아님.
+jwt:
+  secret: test-only-jwt-signing-key-not-a-real-secret-0123456789
+  access-token-validity: 3600000
+  refresh-token-validity: 1209600000
+  refresh-token-inactivity-expiry: 1209600
+  refresh-token-absolute-expiry: 7776000
+  max-refresh-tokens-per-user: 2
+
+# 외부 연동은 통합테스트에서 비활성/미도달 (실호출 금지)
+firebase:
+  enabled: false
+
+rate-limit:
+  enabled: false           # 테스트 간 429 flakiness 방지 (레이트리밋은 별도 유닛테스트로 검증됨)
+
+ai:
+  server:
+    url: http://localhost:0   # 도달 불가 주소 (음성 AI 실호출 방지; 해당 경로는 목/스텁으로만 검증)
+
+app:
+  system-admin-ids: admin
+
+logging:
+  level:
+    org.flywaydb: INFO
+    org.testcontainers: INFO
+    com.github.dockerjava: WARN

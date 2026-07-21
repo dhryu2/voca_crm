@@ -81,19 +81,6 @@ class MemberRepositoryImpl implements MemberRepository {
   }
 
   @override
-  Future<void> deleteMember(
-    String id, {
-    String? userId,
-    String? businessPlaceId,
-  }) async {
-    await memberService.deleteMember(
-      id,
-      userId: userId,
-      businessPlaceId: businessPlaceId,
-    );
-  }
-
-  @override
   Future<List<Member>> getAllMembers() async {
     final models = await memberService.getAllMembers();
     return models.map((model) => model.toEntity()).toList();

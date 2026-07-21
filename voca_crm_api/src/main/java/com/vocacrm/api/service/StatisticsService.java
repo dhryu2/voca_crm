@@ -199,12 +199,15 @@ public class StatisticsService {
         LocalDate endDate = LocalDate.now();
         LocalDate startDate = endDate.minusDays(days - 1);
 
-        String sql = "SELECT reservation_date as date, COUNT(*) as count " +
-                     "FROM reservations " +
-                     "WHERE business_place_id = ? " +
-                     "AND reservation_date BETWEEN ? AND ? " +
-                     "GROUP BY reservation_date " +
-                     "ORDER BY reservation_date";
+        // 삭제 대기(soft-delete) 회원의 예약은 추이에서 제외 (getMemoStatistics 등 다른 통계와 동일 정책)
+        String sql = "SELECT r.reservation_date as date, COUNT(*) as count " +
+                     "FROM reservations r " +
+                     "JOIN members mb ON r.member_id = mb.id " +
+                     "WHERE r.business_place_id = ? " +
+                     "AND mb.is_deleted = false " +
+                     "AND r.reservation_date BETWEEN ? AND ? " +
+                     "GROUP BY r.reservation_date " +
+                     "ORDER BY r.reservation_date";
 
         List<ChartDataDTO.TimeSeriesDataPoint> dataPoints = jdbcTemplate.query(sql,
                 (rs, rowNum) -> ChartDataDTO.TimeSeriesDataPoint.builder()
@@ -259,11 +262,10 @@ public class StatisticsService {
         Integer importantMemos = jdbcTemplate.queryForObject(importantSql, Integer.class, businessPlaceId);
 
         // 아카이브된 메모 개수
-        String archivedSql = "SELECT COUNT(*) FROM memos m " +
-                             "JOIN members mb ON m.member_id = mb.id " +
-                             "WHERE mb.business_place_id = ? AND m.is_archived = true " +
-                             "AND m.is_deleted = false AND mb.is_deleted = false";
-        Integer archivedMemos = jdbcTemplate.queryForObject(archivedSql, Integer.class, businessPlaceId);
+        // 주의: memos 테이블에는 아카이브 컬럼(is_archived)이 존재하지 않으며(V1~V6), 아카이브 기능 자체가 미구현이다.
+        // 기존 코드는 존재하지 않는 컬럼을 조회해 실제 PostgreSQL에서 BadSqlGrammarException(500)을 유발했다.
+        // 아카이브 개념이 없으므로 0으로 집계한다. (아카이브 기능 도입 시 컬럼/마이그레이션과 함께 복구할 것)
+        Integer archivedMemos = 0;
 
         // 일별 메모 작성 추이
         LocalDate endDate = LocalDate.now();

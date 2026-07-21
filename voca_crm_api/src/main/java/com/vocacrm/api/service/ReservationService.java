@@ -43,7 +43,24 @@ public class ReservationService {
         validateReservationDate(reservation.getReservationDate());
         validateNoDuplicateReservation(reservation);
 
-        return reservationRepository.save(reservation);
+        return saveHandlingSlotConflict(reservation);
+    }
+
+    /**
+     * 예약 저장 시 슬롯 중복 제약(ux_reservation_active_slot) 위반을 400 으로 변환.
+     *
+     * <p>앱 레벨 중복 체크(validateNoDuplicateReservation)와 DB 저장 사이에는 TOCTOU 경합 구간이 있어,
+     * 동시에 같은 슬롯을 예약하면 두 요청 모두 앱 체크를 통과한 뒤 두 번째 저장에서 DB 유니크 제약이 위반된다.
+     * plain save() 는 flush 가 트랜잭션 커밋 시점(메서드 반환 이후)에 일어나 여기서 잡을 수 없으므로
+     * saveAndFlush() 로 즉시 flush 하여 예외를 이 구간에서 포착하고, 500 대신 400(중복 예약) 으로 변환한다.
+     * (BusinessPlaceService.requestAccess 의 동일 패턴을 따른다.)
+     */
+    private Reservation saveHandlingSlotConflict(Reservation reservation) {
+        try {
+            return reservationRepository.saveAndFlush(reservation);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            throw new IllegalArgumentException("해당 날짜/시간에 이미 예약이 존재합니다.");
+        }
     }
 
     /**
@@ -237,8 +254,7 @@ public class ReservationService {
             existing.setUpdatedBy(updatedReservation.getUpdatedBy());
         }
 
-        Reservation saved = reservationRepository.save(existing);
-        return saved;
+        return saveHandlingSlotConflict(existing);
     }
 
     /**

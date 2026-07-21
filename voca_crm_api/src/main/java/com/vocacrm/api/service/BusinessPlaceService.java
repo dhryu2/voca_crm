@@ -389,7 +389,12 @@ public class BusinessPlaceService {
                 .role(request.getRole())
                 .status(AccessStatus.APPROVED)
                 .build();
-        userBusinessPlaceRepository.save(ubp);
+        try {
+            // 이미 멤버십(uk_user_business_place)이 있는데 승인하면 500 대신 400 으로 변환(WB-10)
+            userBusinessPlaceRepository.saveAndFlush(ubp);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            throw new InvalidInputException("이미 해당 사업장에 등록된 사용자입니다.");
+        }
 
         // Set as default business place if user doesn't have one
         User user = userRepository.findById(request.getUserId())

@@ -69,6 +69,7 @@ public interface VisitRepository extends JpaRepository<Visit, UUID> {
      */
     @Query("SELECT v FROM Visit v JOIN FETCH v.member m " +
            "WHERE m.businessPlaceId = :businessPlaceId " +
+           "AND m.isDeleted = false " +   // 삭제 대기 회원의 방문은 오늘 방문 목록에서 제외 (get_today_visit_count 함수와 일치, 카운트/목록 불일치 해소)
            "AND CAST(v.visitedAt AS date) = CURRENT_DATE " +
            "ORDER BY v.visitedAt DESC")
     List<Visit> findTodayVisitsByBusinessPlaceId(@Param("businessPlaceId") String businessPlaceId);

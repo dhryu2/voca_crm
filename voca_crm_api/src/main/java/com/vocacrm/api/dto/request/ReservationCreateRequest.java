@@ -1,5 +1,6 @@
 package com.vocacrm.api.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.vocacrm.api.model.Reservation.ReservationStatus;
 import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
@@ -17,6 +18,9 @@ import java.time.LocalTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+// 커스텀 ObjectMapper 는 FAIL_ON_UNKNOWN_PROPERTIES 를 비활성화하지 않으므로, 클라이언트가 DTO 에 없는 키
+// (예: Flutter ReservationModel.toJson 의 updatedBy 등)를 보내면 400 이 된다. ReservationUpdateRequest 와 동일하게 방어(WB-14).
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class ReservationCreateRequest {
 
     @NotBlank(message = "회원 ID는 필수입니다")

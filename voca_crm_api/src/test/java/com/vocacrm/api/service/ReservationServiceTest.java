@@ -47,7 +47,8 @@ class ReservationServiceTest {
         when(reservationRepository.existsDuplicateReservation(
                 reservation.getMemberId(), BUSINESS_PLACE_ID, reservation.getReservationDate(), reservation.getReservationTime()))
                 .thenReturn(false);
-        when(reservationRepository.save(reservation)).thenReturn(reservation);
+        // 슬롯 중복 제약을 잡기 위해 서비스가 saveAndFlush 를 사용하도록 변경됨(WB-03)
+        when(reservationRepository.saveAndFlush(reservation)).thenReturn(reservation);
 
         Reservation result = reservationService.createReservation(reservation);
 
@@ -84,7 +85,7 @@ class ReservationServiceTest {
         updated.setNotes("변경된 메모");
 
         when(reservationRepository.findById(id)).thenReturn(Optional.of(existing));
-        when(reservationRepository.save(any(Reservation.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(reservationRepository.saveAndFlush(any(Reservation.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Reservation result = reservationService.updateReservation(id, updated, null);
 
@@ -103,7 +104,7 @@ class ReservationServiceTest {
         updated.setNotes("메모만 변경");
 
         when(reservationRepository.findById(id)).thenReturn(Optional.of(existing));
-        when(reservationRepository.save(any(Reservation.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(reservationRepository.saveAndFlush(any(Reservation.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Reservation result = reservationService.updateReservation(id, updated, null);
 
@@ -120,7 +121,7 @@ class ReservationServiceTest {
         existing.setStatus(Reservation.ReservationStatus.PENDING);
 
         when(reservationRepository.findById(id)).thenReturn(Optional.of(existing));
-        when(reservationRepository.save(any(Reservation.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(reservationRepository.saveAndFlush(any(Reservation.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Reservation result = reservationService.updateReservation(
                 id, new Reservation(), Reservation.ReservationStatus.CONFIRMED);
@@ -294,7 +295,7 @@ class ReservationServiceTest {
         updated.setUpdatedBy(updatedBy);
 
         when(reservationRepository.findById(id)).thenReturn(Optional.of(existing));
-        when(reservationRepository.save(any(Reservation.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(reservationRepository.saveAndFlush(any(Reservation.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Reservation result = reservationService.updateReservation(id, updated, null);
 

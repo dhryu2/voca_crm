@@ -399,13 +399,15 @@ public class VoiceCommandService {
 
     private VoiceCommandResponse handleMemberGetAll(AiAnalysisResult aiResult, ConversationContextDTO context) {
         String businessPlaceId = context.getBusinessPlaceId();
-        List<Member> members;
 
-        if (businessPlaceId != null) {
-            members = memberService.getMembersByBusinessPlace(businessPlaceId);
-        } else {
-            members = memberService.getAllMembers(0, 100);
+        // 사업장이 지정되지 않으면 전역(모든 사업장) 조회로 폴백하지 않고 거부한다.
+        // 과거 폴백(getAllMembers)은 다른 사업장의 회원까지 노출하는 테넌트 격리 위반이었다.
+        if (businessPlaceId == null) {
+            return createErrorResponse(
+                    "사업장 정보가 없어 회원을 조회할 수 없습니다. 사업장을 먼저 선택해주세요.", "NO_BUSINESS_PLACE");
         }
+
+        List<Member> members = memberService.getMembersByBusinessPlace(businessPlaceId);
 
         if (members.isEmpty()) {
             return createCompletedResponse("등록된 회원이 없습니다.", Map.of());
@@ -1248,6 +1250,13 @@ public class VoiceCommandService {
      */
     public VoiceCommandResponse generateDailyBriefing(String userId, String businessPlaceId) {
         try {
+            // 사업장이 지정되지 않으면 전역(모든 사업장) 조회로 폴백하지 않고 거부한다.
+            // 과거 폴백은 다른 사업장의 회원명·중요메모 내용까지 응답에 노출하는 테넌트 격리 위반이었다.
+            if (businessPlaceId == null) {
+                return createErrorResponse(
+                        "사업장 정보가 없어 브리핑을 생성할 수 없습니다. 사업장을 먼저 선택해주세요.", "NO_BUSINESS_PLACE");
+            }
+
             StringBuilder briefing = new StringBuilder();
             Map<String, Object> data = new HashMap<>();
 
@@ -1261,22 +1270,12 @@ public class VoiceCommandService {
             data.put("todayReservations", todayReservations);
 
             List<Memo> importantMemos = new ArrayList<>();
-            if (businessPlaceId != null) {
-                List<Member> members = memberService.getMembersByBusinessPlace(businessPlaceId);
-                for (Member member : members) {
-                    List<Memo> memberMemos = memoService.getMemosByMemberId(member.getId().toString(), member.getBusinessPlaceId());
-                    importantMemos.addAll(memberMemos.stream()
-                            .filter(Memo::getIsImportant)
-                            .collect(Collectors.toList()));
-                }
-            } else {
-                List<Member> allMembers = memberService.getAllMembers(0, 1000);
-                for (Member member : allMembers) {
-                    List<Memo> memberMemos = memoService.getMemosByMemberId(member.getId().toString(), member.getBusinessPlaceId());
-                    importantMemos.addAll(memberMemos.stream()
-                            .filter(Memo::getIsImportant)
-                            .collect(Collectors.toList()));
-                }
+            List<Member> members = memberService.getMembersByBusinessPlace(businessPlaceId);
+            for (Member member : members) {
+                List<Memo> memberMemos = memoService.getMemosByMemberId(member.getId().toString(), member.getBusinessPlaceId());
+                importantMemos.addAll(memberMemos.stream()
+                        .filter(Memo::getIsImportant)
+                        .collect(Collectors.toList()));
             }
 
             int importantMemoCount = importantMemos.size();

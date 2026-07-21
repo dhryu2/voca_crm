@@ -636,7 +636,8 @@ class BusinessPlaceServiceTest {
         BusinessPlaceAccessRequest result = businessPlaceService.approveRequest(requestId, ownerId);
 
         assertThat(result.getStatus()).isEqualTo(AccessStatus.APPROVED);
-        verify(userBusinessPlaceRepository).save(any(UserBusinessPlace.class));
+        // 멤버십 생성은 uk_user_business_place 위반을 400 으로 변환하기 위해 saveAndFlush 사용(WB-10)
+        verify(userBusinessPlaceRepository).saveAndFlush(any(UserBusinessPlace.class));
     }
 
     @Test

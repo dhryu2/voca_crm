@@ -4,6 +4,9 @@ import java.util.UUID;
 
 import com.vocacrm.api.model.UserNoticeView;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -41,4 +44,20 @@ public interface UserNoticeViewRepository extends JpaRepository<UserNoticeView, 
      * 특정 공지사항의 "다시 보지 않기" 체크 수 카운트
      */
     long countByNoticeIdAndDoNotShowAgainTrue(UUID noticeId);
+
+    /**
+     * 열람 기록 원자적 upsert (WB-10).
+     * check-then-insert 의 TOCTOU 경합(동시 최초 열람 시 uk_user_notice 위반 → 500)을 제거하기 위해
+     * PostgreSQL ON CONFLICT 로 삽입-또는-갱신을 한 번의 원자적 쿼리로 처리한다.
+     */
+    @Modifying
+    @Query(value =
+            "INSERT INTO user_notice_views (id, user_id, notice_id, viewed_at, do_not_show_again) " +
+            "VALUES (gen_random_uuid(), :userId, :noticeId, now(), :doNotShowAgain) " +
+            "ON CONFLICT (user_id, notice_id) " +
+            "DO UPDATE SET viewed_at = now(), do_not_show_again = :doNotShowAgain",
+            nativeQuery = true)
+    void upsertView(@Param("userId") UUID userId,
+                    @Param("noticeId") UUID noticeId,
+                    @Param("doNotShowAgain") boolean doNotShowAgain);
 }

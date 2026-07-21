@@ -220,20 +220,11 @@ class NoticeServiceTest {
     void recordView_기존_기록이_있으면_업데이트한다() {
         UUID userUuid = UUID.fromString(USER_ID);
         UUID noticeUuid = UUID.randomUUID();
-        UserNoticeView existing = new UserNoticeView();
-        existing.setUserId(userUuid);
-        existing.setNoticeId(noticeUuid);
-        existing.setDoNotShowAgain(false);
-
-        when(userNoticeViewRepository.findByUserIdAndNoticeId(userUuid, noticeUuid))
-                .thenReturn(Optional.of(existing));
 
         noticeService.recordView(USER_ID, noticeUuid.toString(), true);
 
-        ArgumentCaptor<UserNoticeView> captor = ArgumentCaptor.forClass(UserNoticeView.class);
-        verify(userNoticeViewRepository).save(captor.capture());
-        assertThat(captor.getValue().getDoNotShowAgain()).isTrue();
-        assertThat(captor.getValue()).isSameAs(existing);
+        // 원자적 upsert(ON CONFLICT)로 삽입-또는-갱신을 처리한다(WB-10). 기존 기록이 있으면 do_not_show_again 갱신.
+        verify(userNoticeViewRepository).upsertView(userUuid, noticeUuid, true);
     }
 
     @Test
@@ -241,16 +232,10 @@ class NoticeServiceTest {
         UUID userUuid = UUID.fromString(USER_ID);
         UUID noticeUuid = UUID.randomUUID();
 
-        when(userNoticeViewRepository.findByUserIdAndNoticeId(userUuid, noticeUuid))
-                .thenReturn(Optional.empty());
-
         noticeService.recordView(USER_ID, noticeUuid.toString(), false);
 
-        ArgumentCaptor<UserNoticeView> captor = ArgumentCaptor.forClass(UserNoticeView.class);
-        verify(userNoticeViewRepository).save(captor.capture());
-        assertThat(captor.getValue().getUserId()).isEqualTo(userUuid);
-        assertThat(captor.getValue().getNoticeId()).isEqualTo(noticeUuid);
-        assertThat(captor.getValue().getDoNotShowAgain()).isFalse();
+        // 기록이 없으면 삽입 — 동일한 upsert 로 처리(동시 최초 열람 경합도 원자적으로 안전)
+        verify(userNoticeViewRepository).upsertView(userUuid, noticeUuid, false);
     }
 
     // ===== getNoticeStats =====
