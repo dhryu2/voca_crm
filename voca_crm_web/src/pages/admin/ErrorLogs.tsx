@@ -27,9 +27,9 @@ import type { ErrorLog, ErrorSeverity, PaginatedResponse } from '@/types';
 
 const SEVERITY_CONFIG: Record<ErrorSeverity, { label: string; color: string; bgColor: string }> = {
   CRITICAL: { label: 'Critical', color: 'text-red-700', bgColor: 'bg-red-100' },
-  HIGH: { label: 'High', color: 'text-orange-700', bgColor: 'bg-orange-100' },
-  MEDIUM: { label: 'Medium', color: 'text-yellow-700', bgColor: 'bg-yellow-100' },
-  LOW: { label: 'Low', color: 'text-blue-700', bgColor: 'bg-blue-100' },
+  ERROR: { label: 'Error', color: 'text-orange-700', bgColor: 'bg-orange-100' },
+  WARNING: { label: 'Warning', color: 'text-yellow-700', bgColor: 'bg-yellow-100' },
+  INFO: { label: 'Info', color: 'text-blue-700', bgColor: 'bg-blue-100' },
 };
 
 export function ErrorLogsPage() {
@@ -113,10 +113,10 @@ export function ErrorLogsPage() {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     return (
-      log.message?.toLowerCase().includes(query) ||
+      log.errorMessage?.toLowerCase().includes(query) ||
       log.errorCode?.toLowerCase().includes(query) ||
       log.username?.toLowerCase().includes(query) ||
-      log.requestPath?.toLowerCase().includes(query)
+      log.requestUrl?.toLowerCase().includes(query)
     );
   });
 
@@ -159,9 +159,9 @@ export function ErrorLogsPage() {
               >
                 <option value="">전체 심각도</option>
                 <option value="CRITICAL">Critical</option>
-                <option value="HIGH">High</option>
-                <option value="MEDIUM">Medium</option>
-                <option value="LOW">Low</option>
+                <option value="ERROR">Error</option>
+                <option value="WARNING">Warning</option>
+                <option value="INFO">Info</option>
               </select>
 
               <select
@@ -252,13 +252,13 @@ export function ErrorLogsPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900 max-w-xs truncate">
-                            {log.message}
+                            {log.errorMessage}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-600">
                             {log.username || '-'}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-500 font-mono max-w-xs truncate">
-                            {log.requestPath || '-'}
+                            {log.requestUrl || '-'}
                           </td>
                           <td className="px-4 py-3">
                             {log.resolved ? (
@@ -392,7 +392,7 @@ export function ErrorLogsPage() {
             <div>
               <h4 className="text-sm font-medium text-gray-500 mb-2">오류 메시지</h4>
               <p className="text-gray-900 p-4 bg-red-50 rounded-lg border border-red-100">
-                {selectedLog.message}
+                {selectedLog.errorMessage}
               </p>
             </div>
 
@@ -410,24 +410,18 @@ export function ErrorLogsPage() {
                   <p className="text-gray-900">{selectedLog.username}</p>
                 </div>
               )}
-              {selectedLog.requestMethod && selectedLog.requestPath && (
+              {selectedLog.requestMethod && selectedLog.requestUrl && (
                 <div className="col-span-2">
                   <h4 className="text-sm font-medium text-gray-500 mb-1">요청</h4>
                   <p className="text-gray-900 font-mono">
-                    {selectedLog.requestMethod} {selectedLog.requestPath}
+                    {selectedLog.requestMethod} {selectedLog.requestUrl}
                   </p>
                 </div>
               )}
-              {selectedLog.ipAddress && (
-                <div>
-                  <h4 className="text-sm font-medium text-gray-500 mb-1">IP 주소</h4>
-                  <p className="text-gray-900 font-mono">{selectedLog.ipAddress}</p>
-                </div>
-              )}
-              {selectedLog.businessPlaceName && (
+              {selectedLog.businessPlaceId && (
                 <div>
                   <h4 className="text-sm font-medium text-gray-500 mb-1">사업장</h4>
-                  <p className="text-gray-900">{selectedLog.businessPlaceName}</p>
+                  <p className="text-gray-900">{selectedLog.businessPlaceId}</p>
                 </div>
               )}
             </div>
@@ -442,12 +436,12 @@ export function ErrorLogsPage() {
               </div>
             )}
 
-            {/* User Agent */}
-            {selectedLog.userAgent && (
+            {/* Device Info */}
+            {selectedLog.deviceInfo && (
               <div>
-                <h4 className="text-sm font-medium text-gray-500 mb-2">User Agent</h4>
+                <h4 className="text-sm font-medium text-gray-500 mb-2">디바이스 정보</h4>
                 <p className="text-sm text-gray-600 p-3 bg-gray-50 rounded-lg break-all">
-                  {selectedLog.userAgent}
+                  {selectedLog.deviceInfo}
                 </p>
               </div>
             )}

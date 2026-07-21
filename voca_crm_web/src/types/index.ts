@@ -150,37 +150,38 @@ export interface PaginatedResponse<T> {
 }
 
 // Error Log Types (Admin)
-export type ErrorSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type ErrorSeverity = 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL';
 
 export interface ErrorLog {
   id: string;
   businessPlaceId?: string;
-  businessPlaceName?: string;
   userId?: string;
   username?: string;
+  screenName?: string;
+  action?: string;
   severity: ErrorSeverity;
   errorCode?: string;
-  message: string;
+  errorMessage: string;
   stackTrace?: string;
-  requestPath?: string;
+  requestUrl?: string;
   requestMethod?: string;
-  userAgent?: string;
-  ipAddress?: string;
+  httpStatusCode?: number;
+  deviceInfo?: string;
+  appVersion?: string;
+  osVersion?: string;
+  platform?: string;
   resolved: boolean;
   resolvedAt?: string;
   resolvedBy?: string;
+  resolutionNote?: string;
   createdAt: string;
 }
 
 export interface ErrorLogSummary {
   totalErrors: number;
-  unresolvedCount: number;
-  criticalCount: number;
-  highCount: number;
-  mediumCount: number;
-  lowCount: number;
-  periodStart: string;
-  periodEnd: string;
+  unresolvedErrors: number;
+  bySeverity: Record<string, number>;
+  byScreen: { screenName: string; errorCount: number }[];
 }
 
 // Notice Types (Admin)

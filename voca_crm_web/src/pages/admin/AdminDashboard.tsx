@@ -185,7 +185,7 @@ export function AdminDashboardPage() {
               <div>
                 <p className="text-sm text-gray-500">미해결 오류</p>
                 <p className="text-3xl font-bold text-gray-900">
-                  {errorSummary?.unresolvedCount || 0}
+                  {errorSummary?.unresolvedErrors || 0}
                 </p>
               </div>
               <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
@@ -201,7 +201,7 @@ export function AdminDashboardPage() {
               <div>
                 <p className="text-sm text-gray-500">Critical 오류</p>
                 <p className="text-3xl font-bold text-gray-900">
-                  {errorSummary?.criticalCount || 0}
+                  {errorSummary?.bySeverity?.CRITICAL || 0}
                 </p>
               </div>
               <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
@@ -320,7 +320,7 @@ export function AdminDashboardPage() {
               <div>
                 <p className="text-sm text-gray-500">미해결 오류</p>
                 <p className="text-2xl font-bold text-red-600">
-                  {errorSummary?.unresolvedCount || 0}건
+                  {errorSummary?.unresolvedErrors || 0}건
                 </p>
               </div>
               <Link
@@ -373,28 +373,28 @@ export function AdminDashboardPage() {
             <div className="grid grid-cols-4 gap-4">
               <div className={cn(
                 "text-center p-4 rounded-lg",
-                errorSummary.criticalCount > 0 ? "bg-red-100" : "bg-red-50"
+                (errorSummary.bySeverity?.CRITICAL || 0) > 0 ? "bg-red-100" : "bg-red-50"
               )}>
-                <p className="text-3xl font-bold text-red-600">{errorSummary.criticalCount}</p>
+                <p className="text-3xl font-bold text-red-600">{errorSummary.bySeverity?.CRITICAL || 0}</p>
                 <p className="text-sm text-red-700">Critical</p>
               </div>
               <div className={cn(
                 "text-center p-4 rounded-lg",
-                errorSummary.highCount > 0 ? "bg-orange-100" : "bg-orange-50"
+                (errorSummary.bySeverity?.ERROR || 0) > 0 ? "bg-orange-100" : "bg-orange-50"
               )}>
-                <p className="text-3xl font-bold text-orange-600">{errorSummary.highCount}</p>
-                <p className="text-sm text-orange-700">High</p>
+                <p className="text-3xl font-bold text-orange-600">{errorSummary.bySeverity?.ERROR || 0}</p>
+                <p className="text-sm text-orange-700">Error</p>
               </div>
               <div className={cn(
                 "text-center p-4 rounded-lg",
-                errorSummary.mediumCount > 0 ? "bg-yellow-100" : "bg-yellow-50"
+                (errorSummary.bySeverity?.WARNING || 0) > 0 ? "bg-yellow-100" : "bg-yellow-50"
               )}>
-                <p className="text-3xl font-bold text-yellow-600">{errorSummary.mediumCount}</p>
-                <p className="text-sm text-yellow-700">Medium</p>
+                <p className="text-3xl font-bold text-yellow-600">{errorSummary.bySeverity?.WARNING || 0}</p>
+                <p className="text-sm text-yellow-700">Warning</p>
               </div>
               <div className="text-center p-4 bg-blue-50 rounded-lg">
-                <p className="text-3xl font-bold text-blue-600">{errorSummary.lowCount}</p>
-                <p className="text-sm text-blue-700">Low</p>
+                <p className="text-3xl font-bold text-blue-600">{errorSummary.bySeverity?.INFO || 0}</p>
+                <p className="text-sm text-blue-700">Info</p>
               </div>
             </div>
           </CardContent>
