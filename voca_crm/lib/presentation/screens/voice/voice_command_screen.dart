@@ -1,10 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_tts/flutter_tts.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:voca_crm/core/theme/theme_color.dart';
 import 'package:voca_crm/core/utils/message_handler.dart';
 import 'package:voca_crm/data/datasource/memo_service.dart';
@@ -15,8 +12,26 @@ import 'package:voca_crm/domain/entity/member.dart';
 import 'package:voca_crm/domain/entity/memo.dart';
 import 'package:voca_crm/domain/entity/selected_entity.dart';
 import 'package:voca_crm/domain/entity/voice_command_response.dart';
-import 'package:voca_crm/presentation/screens/main_screen.dart';
+import 'package:voca_crm/presentation/screens/voice/voice_session_ports.dart';
 import 'package:voca_crm/presentation/viewmodels/user_view_model.dart';
+
+const kVoiceMicButtonKey = Key('voice_mic_button');
+const kVoiceStatusMessageKey = Key('voice_status_message');
+const kVoiceErrorNextActionKey = Key('voice_error_next_action');
+const kVoiceCompactStatusKey = Key('voice_compact_status');
+const kVoiceReplayButtonKey = Key('voice_replay_button');
+const kVoiceStatusCardKey = Key('voice_status_card');
+const kVoiceAutoRestartChipKey = Key('voice_auto_restart_chip');
+const kVoiceListenPolicyHintKey = Key('voice_listen_policy_hint');
+const kVoiceReselectMemberKey = Key('voice_reselect_member');
+const kVoicePinnedMemberCardKey = Key('voice_pinned_member_card');
+const kVoiceConfirmationPromptKey = Key('voice_confirmation_prompt');
+const kVoiceResultPanelKey = Key('voice_result_panel');
+const kVoiceResultLineKey = Key('voice_result_line');
+const kVoiceResultMetricsKey = Key('voice_result_metrics');
+const kVoiceRecoveryExamplesKey = Key('voice_recovery_examples');
+
+const kVoiceMinTouchTarget = 44.0;
 
 enum VoiceState {
   ready,
@@ -57,8 +72,231 @@ enum VoiceState {
   return (member: memberData, memo: memoData);
 }
 
+/// STT가 붙이는 마침표·물음표·공백을 없앤 뒤 비교한다.
+String normalizeVoiceUtterance(String text) {
+  return text
+      .trim()
+      .toLowerCase()
+      .replaceAll(RegExp(r'\s+'), '')
+      .replaceAll(RegExp(r'[.。,，!?？~…·]'), '');
+}
+
+/// 다중 후보에서 "첫 번째", "1번", "1" 같은 발화를 1-based 번호로 변환한다.
+/// STT는 "첫 번째"처럼 띄어 쓰므로 공백을 제거한 뒤 완전일치한다.
+int? parseVoiceSelectionNumber(String text) {
+  final normalized = normalizeVoiceUtterance(text);
+  if (normalized.isEmpty) return null;
+
+  const numberMap = {
+    '1': 1,
+    '2': 2,
+    '3': 3,
+    '4': 4,
+    '5': 5,
+    '6': 6,
+    '7': 7,
+    '8': 8,
+    '9': 9,
+    '10': 10,
+    '1번': 1,
+    '2번': 2,
+    '3번': 3,
+    '4번': 4,
+    '5번': 5,
+    '6번': 6,
+    '7번': 7,
+    '8번': 8,
+    '9번': 9,
+    '10번': 10,
+    '첫번째': 1,
+    '두번째': 2,
+    '세번째': 3,
+    '네번째': 4,
+    '다섯번째': 5,
+    '여섯번째': 6,
+    '일곱번째': 7,
+    '여덟번째': 8,
+    '아홉번째': 9,
+    '열번째': 10,
+    '첫째': 1,
+    '둘째': 2,
+    '셋째': 3,
+    '넷째': 4,
+    '다섯째': 5,
+    '하나': 1,
+    '둘': 2,
+    '셋': 3,
+    '넷': 4,
+    '다섯': 5,
+  };
+
+  if (numberMap.containsKey(normalized)) return numberMap[normalized];
+
+  final match = RegExp(r'^(\d+)(번|번째)?$').firstMatch(normalized);
+  if (match != null) {
+    final parsed = int.tryParse(match.group(1)!);
+    if (parsed != null && parsed >= 1 && parsed <= 10) return parsed;
+  }
+
+  return null;
+}
+
+/// 확인 단계 발화를 수락/거절로만 해석한다.
+/// "예약"처럼 '예'가 포함된 일반 말은 null — 파괴 확인으로 치지 않는다.
+bool? parseVoiceConfirmation(String text) {
+  final normalized = normalizeVoiceUtterance(text);
+  if (normalized.isEmpty) return null;
+
+  const rejectExact = {
+    '아니',
+    '아니요',
+    '아니오',
+    '아뇨',
+    '취소',
+    '싫어',
+    '싫음',
+    '안돼',
+    '안됨',
+    '안맞어',
+    '안맞아',
+    '안맞아요',
+    '아닌데',
+    '노',
+    'no',
+  };
+  const acceptExact = {
+    '예',
+    '네',
+    '응',
+    '맞아',
+    '맞아요',
+    '맞습니다',
+    '좋아요',
+    '좋아',
+    '그래',
+    '확인',
+    '오케이',
+    'ok',
+    'yes',
+  };
+
+  if (rejectExact.contains(normalized)) return false;
+  if (acceptExact.contains(normalized)) return true;
+  if (normalized.startsWith('아니')) return false;
+  if (normalized.startsWith('취소')) return false;
+  return null;
+}
+
+/// 잘못된 회원 선택 후 "다른 사람"으로 후보 목록을 되돌린다.
+bool parseVoiceMemberReselect(String text) {
+  const reselectExact = {
+    '아니',
+    '아니요',
+    '아니오',
+    '아뇨',
+    '다른회원',
+    '다른사람',
+    '다른거',
+    '다시',
+    '다시선택',
+    '다시골라',
+    '틀렸어',
+    '잘못',
+    '아닌데',
+  };
+  return reselectExact.contains(normalizeVoiceUtterance(text));
+}
+
+/// API candidates가 List<Map>이 아니어도 화면이 죽지 않게 건다.
+List<Map<String, dynamic>> parseVoiceCandidateMaps(dynamic raw) {
+  if (raw is! List) return const [];
+  final out = <Map<String, dynamic>>[];
+  for (final item in raw) {
+    if (item is Map) {
+      out.add(Map<String, dynamic>.from(item));
+    }
+  }
+  return out;
+}
+
+String? voiceCandidateId(Map<String, dynamic> candidate) {
+  final id = candidate['id'];
+  if (id == null) return null;
+  final value = id.toString().trim();
+  return value.isEmpty ? null : value;
+}
+
+int? parseVoiceMetricInt(dynamic value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value.trim());
+  return null;
+}
+
+/// 브리핑/홈통계 data에서 스캔할 숫자 필드만 꺼낸다. visits 리스트 길이는 세지 않는다.
+List<VoiceMetricField> parseVoiceMetricFields(Map<String, dynamic>? data) {
+  if (data == null) return const [];
+
+  const specs = <(List<String>, String, String, String)>[
+    (['todayVisits', 'visitCount', 'todayVisitCount'], '방문', '건', 'visit'),
+    (['todayReservations', 'reservationCount'], '예약', '건', 'reservation'),
+    (['totalMembers', 'memberCount'], '회원', '명', 'member'),
+    (['importantMemoCount'], '중요 메모', '개', 'memo'),
+  ];
+
+  final out = <VoiceMetricField>[];
+  for (final spec in specs) {
+    for (final key in spec.$1) {
+      if (!data.containsKey(key)) continue;
+      final parsed = parseVoiceMetricInt(data[key]);
+      if (parsed == null) continue;
+      out.add(
+        VoiceMetricField(
+          key: spec.$4,
+          label: spec.$2,
+          value: parsed,
+          unit: spec.$3,
+        ),
+      );
+      break;
+    }
+  }
+  return out;
+}
+
+bool isVoiceBriefingOrStatsUtterance(String text) {
+  final normalized = normalizeVoiceUtterance(text);
+  return normalized.contains('브리핑') || normalized.contains('통계');
+}
+
+bool shouldPinVoiceResultPanel({
+  required String userText,
+  Map<String, dynamic>? data,
+}) {
+  if (parseVoiceMetricFields(data).isNotEmpty) return true;
+  return isVoiceBriefingOrStatsUtterance(userText);
+}
+
+String voiceResultPanelTitle(String userText) {
+  final normalized = normalizeVoiceUtterance(userText);
+  if (normalized.contains('통계')) return '홈 통계';
+  if (normalized.contains('브리핑')) return '오늘 브리핑';
+  return '결과';
+}
+
 class VoiceCommandScreen extends StatefulWidget {
-  const VoiceCommandScreen({super.key});
+  const VoiceCommandScreen({
+    super.key,
+    this.speech,
+    this.tts,
+    this.permission,
+    this.voiceCommandApi,
+  });
+
+  final VoiceSpeechPort? speech;
+  final VoiceTtsPort? tts;
+  final VoicePermissionPort? permission;
+  final VoiceCommandApi? voiceCommandApi;
 
   @override
   State<VoiceCommandScreen> createState() => _VoiceCommandScreenState();
@@ -67,8 +305,10 @@ class VoiceCommandScreen extends StatefulWidget {
 class _VoiceCommandScreenState extends State<VoiceCommandScreen>
     with TickerProviderStateMixin {
   // Speech & TTS
-  late stt.SpeechToText _speech;
-  late FlutterTts _flutterTts;
+  late VoiceSpeechPort _speech;
+  late VoiceTtsPort _flutterTts;
+  late VoicePermissionPort _permission;
+  late VoiceCommandApi _voiceApi;
 
   // Animation Controllers
   late AnimationController _pulseController;
@@ -77,7 +317,6 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
   late Animation<double> _pulseAnimation;
 
   // Services
-  final _voiceCommandService = VoiceCommandService();
   final _memoRepository = MemoRepositoryImpl(MemoService());
 
   // State
@@ -89,7 +328,16 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
   // Voice Recognition
   String _recognizedText = '';
   String _statusMessage = '마이크 버튼을 눌러 시작하세요';
+  String? _errorNextAction;
+  VoiceErrorGuidance? _lastErrorGuidance;
+  bool _disposing = false;
+  int _commandEpoch = 0;
+  bool _ignoreListenEnd = false;
   String _pendingUserText = '';
+  String _lastSpokenText = '';
+  String _lastUserCommand = '';
+  VoicePinnedResult? _pinnedResult;
+  bool _showRecoveryExamples = false;
 
   // Conversation
   List<Member> _recentMembers = [];
@@ -102,34 +350,23 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
   bool _isConfirmationStep = false;
   bool _isWaitingForNumberResponse = false;
   String? _lastSearchKeyword;
+  List<Map<String, dynamic>> _lastMemberCandidates = [];
+  ConversationContext? _lastMemberSelectionContext;
+  String? _lastMemberSearchKeyword;
 
   // Conversation History (for chat UI)
   final List<ChatMessage> _chatMessages = [];
   final ScrollController _chatScrollController = ScrollController();
 
-  // Command Examples
-  final List<CommandExample> _commandExamples = [
-    CommandExample(icon: Icons.search, text: '1234번 회원 찾아줘', category: '검색'),
-    CommandExample(icon: Icons.person, text: '홍길동 회원 찾아줘', category: '검색'),
-    CommandExample(
-      icon: Icons.note_add,
-      text: '홍길동에게 예약 확인이라고 메모',
-      category: '메모',
-    ),
-    CommandExample(
-      icon: Icons.check_circle,
-      text: '홍길동 방문 체크해줘',
-      category: '방문',
-    ),
-    CommandExample(icon: Icons.today, text: '오늘 브리핑 알려줘', category: '통계'),
-    CommandExample(icon: Icons.person_add, text: '김철수 회원 등록해줘', category: '등록'),
-  ];
+  final List<CommandExample> _commandExamples = kVoiceOwnerCommandExamples;
 
   @override
   void initState() {
     super.initState();
-    _speech = stt.SpeechToText();
-    _flutterTts = FlutterTts();
+    _speech = widget.speech ?? PluginVoiceSpeechPort();
+    _flutterTts = widget.tts ?? PluginVoiceTtsPort();
+    _permission = widget.permission ?? PluginVoicePermissionPort();
+    _voiceApi = widget.voiceCommandApi ?? VoiceCommandServiceApi();
     _initAnimations();
     _checkPermissionsAndInitialize();
   }
@@ -156,33 +393,28 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
 
   /// 권한 확인 및 초기화
   Future<void> _checkPermissionsAndInitialize() async {
-    // 마이크 + 음성 인식 권한 동시 요청
-    final statuses = await [
-      Permission.microphone,
-      Permission.speech,
-    ].request();
+    final outcome = await _permission.requestMicrophoneAndSpeech();
+    if (!mounted) return;
 
-    final micStatus = statuses[Permission.microphone]!;
-    final speechStatus = statuses[Permission.speech]!;
-
-    if (micStatus.isPermanentlyDenied || speechStatus.isPermanentlyDenied) {
+    if (outcome == VoicePermissionOutcome.permanentlyDenied) {
       setState(() {
         _currentState = VoiceState.permissionDenied;
         _statusMessage = '마이크 권한이 필요합니다';
+        _errorNextAction = '설정에서 마이크 권한을 허용해주세요';
       });
       _showPermissionDeniedDialog();
       return;
     }
 
-    if (micStatus.isDenied || speechStatus.isDenied) {
+    if (outcome == VoicePermissionOutcome.denied) {
       setState(() {
         _currentState = VoiceState.permissionDenied;
         _statusMessage = '마이크 권한이 거부되었습니다';
+        _errorNextAction = '설정에서 마이크 권한을 허용해주세요';
       });
       return;
     }
 
-    // 권한 승인됨 - 초기화 진행
     await _initSpeech();
     await _initTts();
   }
@@ -219,7 +451,7 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
             SizedBox(height: 12),
             Text(
               '설정에서 마이크 권한을 허용해주세요.',
-              style: TextStyle(fontSize: 14, color: Colors.grey),
+              style: TextStyle(fontSize: 14, color: ThemeColor.textSecondary),
             ),
           ],
         ),
@@ -234,7 +466,7 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              openAppSettings();
+              _permission.openSettings();
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: ThemeColor.primary,
@@ -254,7 +486,7 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
     try {
       _speechAvailable = await _speech.initialize(
         onStatus: (status) {
-          if (!mounted) return;
+          if (!mounted || _disposing) return;
           // 엔진이 세션을 닫으면 'notListening' 또는 'done'이 온다.
           // listening 상태로 남아있으면 어느 쪽이든 UI를 ready로 동기화해
           // "종료음은 났는데 UI는 인식중" 불일치를 막는다.
@@ -266,9 +498,16 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
             });
             _stopAnimations();
 
+            if (_ignoreListenEnd) {
+              _ignoreListenEnd = false;
+              return;
+            }
+
             if (_autoRestart && _recognizedText.isEmpty) {
               Future.delayed(const Duration(seconds: 1), () {
-                if (mounted && _currentState == VoiceState.ready) {
+                if (mounted &&
+                    _autoRestart &&
+                    _currentState == VoiceState.ready) {
                   _startListening();
                 }
               });
@@ -276,15 +515,16 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
           }
         },
         onError: (error) {
-          if (!mounted) return;
+          if (!mounted || _disposing) return;
           _stopAnimations();
 
           // 권한 관련 에러인지 확인
-          if (error.errorMsg.contains('permission') ||
-              error.errorMsg.contains('Permission')) {
+          if (error.errorMsg.toLowerCase().contains('permission')) {
+            _speechAvailable = false;
             setState(() {
-              _currentState = VoiceState.error;
-              _statusMessage = '음성 인식 오류';
+              _currentState = VoiceState.permissionDenied;
+              _statusMessage = '마이크 권한이 거부되었습니다';
+              _errorNextAction = '설정에서 마이크 권한을 허용해주세요';
             });
             _showPermissionDeniedDialog();
             return;
@@ -299,7 +539,9 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
 
           if (_autoRestart) {
             Future.delayed(const Duration(seconds: 2), () {
-              if (mounted && _currentState == VoiceState.ready) {
+              if (mounted &&
+                  _autoRestart &&
+                  _currentState == VoiceState.ready) {
                 _startListening();
               }
             });
@@ -323,22 +565,53 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
     await _flutterTts.setPitch(1.0);
 
     _flutterTts.setCompletionHandler(() {
-      if (mounted) {
-        setState(() {
-          _currentState = VoiceState.ready;
-          _statusMessage = '명령을 기다리고 있습니다';
-        });
-        _stopAnimations();
+      if (!mounted || _disposing) return;
+      if (_currentState != VoiceState.speaking) return;
+      _stopAnimations();
 
-        if (_autoRestart) {
-          Future.delayed(const Duration(milliseconds: 500), () {
-            if (mounted && _currentState == VoiceState.ready) {
-              _startListening();
-            }
-          });
-        }
+      final blockingError = _lastErrorGuidance != null &&
+          !_lastErrorGuidance!.allowAutoRestart;
+      if (blockingError) {
+        setState(() {
+          _currentState = VoiceState.error;
+          _statusMessage = _lastErrorGuidance!.statusMessage;
+          _errorNextAction = _lastErrorGuidance!.nextAction;
+        });
+        return;
+      }
+
+      // 완료된 브리핑/검색 직후 500ms listen은 오청취를 만든다.
+      // 이어지는 대화(번호·확인)와 회복 가능한 에러만 자동 재청취한다.
+      final shouldRestart = _shouldAutoRestartListening();
+      _lastErrorGuidance = null;
+      setState(() {
+        _currentState = VoiceState.ready;
+        _statusMessage = '명령을 기다리고 있습니다';
+      });
+
+      if (shouldRestart) {
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted &&
+              _autoRestart &&
+              _currentState == VoiceState.ready) {
+            _startListening();
+          }
+        });
       }
     });
+  }
+
+  bool _shouldAutoRestartListening() {
+    if (!_autoRestart) return false;
+    if (_lastErrorGuidance != null && !_lastErrorGuidance!.allowAutoRestart) {
+      return false;
+    }
+    if (_isWaitingForNumberResponse || _isConfirmationStep) return true;
+    if (_conversationContext != null) return true;
+    if (_lastErrorGuidance != null && _lastErrorGuidance!.allowAutoRestart) {
+      return true;
+    }
+    return false;
   }
 
   void _stopAnimations() {
@@ -348,11 +621,22 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
     _waveController.reset();
   }
 
-  Future<void> _speak(String text) async {
-    if (text.isEmpty) return;
+  Future<void> _speak(String text, {bool addToChat = true}) async {
+    if (!mounted || _disposing) return;
+    if (text.isEmpty) {
+      if (_currentState == VoiceState.processing) {
+        setState(() {
+          _currentState = VoiceState.ready;
+          _statusMessage = '명령을 기다리고 있습니다';
+        });
+      }
+      return;
+    }
 
-    // 채팅 메시지 추가
-    _addChatMessage(text, isUser: false);
+    if (addToChat) {
+      _addChatMessage(text, isUser: false);
+    }
+    _lastSpokenText = text;
 
     setState(() {
       _currentState = VoiceState.speaking;
@@ -365,6 +649,48 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
 
     _pulseController.repeat(reverse: true);
     await _flutterTts.speak(text);
+  }
+
+  bool _isCurrentEpoch(int epoch) =>
+      mounted && !_disposing && epoch == _commandEpoch;
+
+  bool get _canReselectMember =>
+      _lastMemberCandidates.isNotEmpty &&
+      _lastMemberSelectionContext != null &&
+      !_isWaitingForNumberResponse &&
+      !_isConfirmationStep &&
+      _currentMember != null &&
+      _conversationContext == null;
+
+  bool get _shouldShowRecoveryExamples =>
+      _showRecoveryExamples &&
+      _chatMessages.isNotEmpty &&
+      _candidateMembers.isEmpty &&
+      _candidateMemos.isEmpty &&
+      !_isConfirmationStep;
+
+  Future<void> _replayLastSpeech() async {
+    if (_lastSpokenText.isEmpty) return;
+    if (_currentState == VoiceState.processing ||
+        _currentState == VoiceState.permissionDenied) {
+      return;
+    }
+    if (_currentState == VoiceState.listening) {
+      _ignoreListenEnd = true;
+      if (_speech.isListening) {
+        await _speech.stop();
+      }
+      if (!mounted || _disposing) return;
+      _stopAnimations();
+      setState(() {
+        _currentState = VoiceState.ready;
+      });
+    }
+    if (_currentState != VoiceState.ready &&
+        _currentState != VoiceState.error) {
+      return;
+    }
+    await _speak(_lastSpokenText, addToChat: false);
   }
 
   void _startListening() async {
@@ -385,6 +711,8 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
       _recognizedText = '';
       _pendingUserText = '';
       _statusMessage = '듣고 있습니다...';
+      _errorNextAction = null;
+      _lastErrorGuidance = null;
     });
 
     _waveController.repeat();
@@ -392,6 +720,7 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
 
     await _speech.listen(
       onResult: (result) {
+        if (!mounted || _disposing) return;
         setState(() {
           _recognizedText = result.recognizedWords;
           if (_recognizedText.isNotEmpty) {
@@ -408,25 +737,18 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
           _processVoiceCommand(_recognizedText);
         }
       },
-      // confirmation 모드는 짧은 확답용이라 첫 어절에서 세션이 닫힘 —
-      // 문장형 명령을 받으려면 dictation 모드여야 한다.
-      listenMode: stt.ListenMode.dictation,
-      localeId: 'ko_KR',
-      cancelOnError: false,
-      partialResults: true,
-      pauseFor: const Duration(seconds: 3),
-      listenFor: const Duration(seconds: 30),
     );
   }
 
   void _stopListening() async {
+    _ignoreListenEnd = true;
     if (_speech.isListening) {
       await _speech.stop();
     }
+    if (!mounted) return;
     setState(() {
       _currentState = VoiceState.ready;
       _statusMessage = '음성 인식 중지됨';
-      _autoRestart = false;
       _pendingUserText = '';
     });
     _stopAnimations();
@@ -460,6 +782,7 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
 
   void _scrollToBottom() {
     Future.delayed(const Duration(milliseconds: 100), () {
+      if (!mounted || _disposing) return;
       if (_chatScrollController.hasClients) {
         _chatScrollController.animateTo(
           _chatScrollController.position.maxScrollExtent,
@@ -471,15 +794,20 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
   }
 
   Future<void> _processVoiceCommand(String text) async {
+    if (_currentState == VoiceState.processing) return;
+    final epoch = ++_commandEpoch;
+
     // 실시간 입력 버블 제거 후 확정 메시지로 추가
     setState(() {
       _pendingUserText = '';
+      _lastUserCommand = text;
+      _showRecoveryExamples = false;
     });
     _addChatMessage(text, isUser: true);
 
     setState(() {
       _currentState = VoiceState.processing;
-      _statusMessage = '처리 중...';
+      _statusMessage = '분석 중...';
     });
     _stopAnimations();
 
@@ -489,33 +817,47 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
       return;
     }
 
-    // 확인 단계인 경우
     if (_isConfirmationStep) {
       final confirmed = _isConfirmationResponse(text);
       if (confirmed != null) {
         await _handleConfirmationResponse(confirmed);
         return;
       }
+      await _speak('예 또는 아니오로 대답해주세요.');
+      return;
+    }
+
+    if (_canReselectMember && parseVoiceMemberReselect(text)) {
+      await _restoreMemberCandidates();
+      return;
     }
 
     try {
       final userViewModel = context.read<UserViewModel>();
       final userId = userViewModel.user?.providerId;
 
-      final response = await _voiceCommandService.sendVoiceCommand(
+      final response = await _voiceApi.sendVoiceCommand(
         text: text,
         context: _conversationContext,
         userId: userId,
       );
+      if (!_isCurrentEpoch(epoch)) return;
 
       if (response.isClarificationNeeded) {
         await _handleClarificationNeeded(response);
       } else if (response.isCompleted) {
         await _handleCommandCompleted(response);
-      } else if (response.isError) {
-        await _speak(response.message);
+      } else {
+        await _presentVoiceError(
+          response.errorCode,
+          fallbackMessage: response.message,
+        );
       }
+    } on VoiceCommandException catch (e) {
+      if (!_isCurrentEpoch(epoch)) return;
+      await _presentVoiceError(e.errorCode, fallbackMessage: e.message);
     } catch (e, stackTrace) {
+      if (!_isCurrentEpoch(epoch)) return;
       if (mounted) {
         final userViewModel = context.read<UserViewModel>();
         await AppMessageHandler.handleErrorWithLogging(
@@ -527,31 +869,32 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
           userId: userViewModel.user?.id,
         );
       }
-      await _speak('명령 처리 중 오류가 발생했습니다. 다시 시도해주세요.');
+      await _presentVoiceError(
+        null,
+        fallbackMessage: '명령 처리 중 오류가 발생했습니다. 다시 시도해주세요.',
+      );
     }
   }
 
-  bool? _isConfirmationResponse(String text) {
-    final lower = text.toLowerCase();
-    if (lower.contains('예') ||
-        lower.contains('네') ||
-        lower.contains('응') ||
-        lower.contains('맞') ||
-        lower.contains('좋') ||
-        lower.contains('ok') ||
-        lower.contains('yes') ||
-        lower.contains('확인')) {
-      return true;
-    }
-    if (lower.contains('아니') ||
-        lower.contains('취소') ||
-        lower.contains('no') ||
-        lower.contains('싫') ||
-        lower.contains('안')) {
-      return false;
-    }
-    return null;
+  Future<void> _presentVoiceError(
+    String? errorCode, {
+    String? fallbackMessage,
+  }) async {
+    final guidance = resolveVoiceErrorGuidance(
+      errorCode: errorCode,
+      fallbackMessage: fallbackMessage,
+    );
+    _lastErrorGuidance = guidance;
+    if (!mounted) return;
+    setState(() {
+      _errorNextAction = guidance.nextAction;
+      _statusMessage = guidance.statusMessage;
+      _showRecoveryExamples = true;
+    });
+    await _speak('${guidance.statusMessage} ${guidance.nextAction}');
   }
+
+  bool? _isConfirmationResponse(String text) => parseVoiceConfirmation(text);
 
   Future<void> _handleNumberResponse(String text) async {
     final candidates = _candidateMembers.isNotEmpty
@@ -571,7 +914,11 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
       return;
     }
 
-    final selectedId = candidates[number - 1]['id'] as String;
+    final selectedId = voiceCandidateId(candidates[number - 1]);
+    if (selectedId == null) {
+      await _speak('선택한 항목 정보가 없습니다. 다른 번호로 말씀해주세요.');
+      return;
+    }
 
     setState(() {
       _isWaitingForNumberResponse = false;
@@ -605,10 +952,10 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
       return;
     }
 
-    final candidates = response.data?['candidates'] as List<dynamic>?;
+    final candidates = parseVoiceCandidateMaps(response.data?['candidates']);
 
-    if (candidates == null || candidates.isEmpty) {
-      await _speak('정보를 찾을 수 없습니다.');
+    if (candidates.isEmpty) {
+      await _speak('정보를 찾을 수 없습니다. 마이크를 눌러 다시 검색해 주세요.');
       return;
     }
 
@@ -620,15 +967,17 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
       _lastSearchKeyword = searchKeyword;
 
       if (response.isMemberSelection) {
-        _candidateMembers = candidates
-            .map((c) => c as Map<String, dynamic>)
-            .toList();
+        _candidateMembers = candidates;
         _candidateMemos = [];
+        _lastMemberCandidates = List<Map<String, dynamic>>.from(candidates);
+        _lastMemberSelectionContext = response.context;
+        _lastMemberSearchKeyword = searchKeyword;
       } else if (response.isMemoSelection) {
-        _candidateMemos = candidates
-            .map((c) => c as Map<String, dynamic>)
-            .toList();
+        _candidateMemos = candidates;
         _candidateMembers = [];
+      } else {
+        _candidateMembers = candidates;
+        _candidateMemos = [];
       }
 
       _conversationContext = response.context;
@@ -673,11 +1022,34 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
       });
     }
 
-    await _speak(response.message);
+    final metrics = parseVoiceMetricFields(response.data);
+    final pinBriefing = memberData == null &&
+        shouldPinVoiceResultPanel(
+          userText: _lastUserCommand,
+          data: response.data,
+        ) &&
+        (response.message.isNotEmpty || metrics.isNotEmpty);
+
+    setState(() {
+      _showRecoveryExamples = false;
+      _pinnedResult = pinBriefing
+          ? VoicePinnedResult(
+              title: voiceResultPanelTitle(_lastUserCommand),
+              spokenText: response.message,
+              metrics: metrics,
+            )
+          : null;
+    });
+
+    await _speak(response.message, addToChat: !pinBriefing);
   }
 
   Future<void> _selectCandidate(Map<String, dynamic> candidate) async {
-    final id = candidate['id'] as String;
+    final id = voiceCandidateId(candidate);
+    if (id == null) {
+      await _speak('선택한 항목 정보가 없습니다. 다른 번호로 말씀해주세요.');
+      return;
+    }
     final selectionOptions = _conversationContext?.currentStep;
 
     if (_currentState == VoiceState.speaking) {
@@ -708,9 +1080,10 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
     List<String> selectedIds, {
     bool selectAll = false,
   }) async {
+    final epoch = ++_commandEpoch;
     setState(() {
       _currentState = VoiceState.processing;
-      _statusMessage = '처리 중...';
+      _statusMessage = '분석 중...';
     });
 
     try {
@@ -744,20 +1117,28 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
       final userViewModel = context.read<UserViewModel>();
       final userId = userViewModel.user?.providerId;
 
-      final response = await _voiceCommandService.sendVoiceCommand(
+      final response = await _voiceApi.sendVoiceCommand(
         text: selectAll ? '전체' : selectedIds.join(','),
         context: updatedContext,
         userId: userId,
       );
+      if (!_isCurrentEpoch(epoch)) return;
 
       if (response.isClarificationNeeded) {
         await _handleClarificationNeeded(response);
       } else if (response.isCompleted) {
         await _handleCommandCompleted(response);
-      } else if (response.isError) {
-        await _speak(response.message);
+      } else {
+        await _presentVoiceError(
+          response.errorCode,
+          fallbackMessage: response.message,
+        );
       }
+    } on VoiceCommandException catch (e) {
+      if (!_isCurrentEpoch(epoch)) return;
+      await _presentVoiceError(e.errorCode, fallbackMessage: e.message);
     } catch (e, stackTrace) {
+      if (!_isCurrentEpoch(epoch)) return;
       if (mounted) {
         final userViewModel = context.read<UserViewModel>();
         await AppMessageHandler.handleErrorWithLogging(
@@ -769,11 +1150,15 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
           userId: userViewModel.user?.id,
         );
       }
-      await _speak('선택 처리 중 오류가 발생했습니다.');
+      await _presentVoiceError(
+        null,
+        fallbackMessage: '선택 처리 중 오류가 발생했습니다.',
+      );
     }
   }
 
   Future<void> _handleConfirmationResponse(bool confirmed) async {
+    final epoch = ++_commandEpoch;
     setState(() {
       _currentState = VoiceState.processing;
       _statusMessage = confirmed ? '진행 중...' : '취소 중...';
@@ -783,11 +1168,12 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
       final userViewModel = context.read<UserViewModel>();
       final userId = userViewModel.user?.providerId;
 
-      final response = await _voiceCommandService.sendVoiceCommand(
+      final response = await _voiceApi.sendVoiceCommand(
         text: confirmed ? '예' : '아니오',
         context: _conversationContext,
         userId: userId,
       );
+      if (!_isCurrentEpoch(epoch)) return;
 
       setState(() => _isConfirmationStep = false);
 
@@ -795,10 +1181,18 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
         await _handleClarificationNeeded(response);
       } else if (response.isCompleted) {
         await _handleCommandCompleted(response);
-      } else if (response.isError) {
-        await _speak(response.message);
+      } else {
+        await _presentVoiceError(
+          response.errorCode,
+          fallbackMessage: response.message,
+        );
       }
+    } on VoiceCommandException catch (e) {
+      if (!_isCurrentEpoch(epoch)) return;
+      setState(() => _isConfirmationStep = false);
+      await _presentVoiceError(e.errorCode, fallbackMessage: e.message);
     } catch (e, stackTrace) {
+      if (!_isCurrentEpoch(epoch)) return;
       if (mounted) {
         final userViewModel = context.read<UserViewModel>();
         await AppMessageHandler.handleErrorWithLogging(
@@ -810,12 +1204,46 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
           userId: userViewModel.user?.id,
         );
       }
-      await _speak('확인 처리 중 오류가 발생했습니다.');
+      await _presentVoiceError(
+        null,
+        fallbackMessage: '확인 처리 중 오류가 발생했습니다.',
+      );
       setState(() => _isConfirmationStep = false);
     }
   }
 
+  Future<void> _restoreMemberCandidates() async {
+    if (_lastMemberCandidates.isEmpty || _lastMemberSelectionContext == null) {
+      await _speak('다시 고를 회원 목록이 없습니다.');
+      return;
+    }
+
+    if (_currentState == VoiceState.speaking) {
+      await _flutterTts.stop();
+      _stopAnimations();
+    }
+
+    setState(() {
+      _candidateMembers = List<Map<String, dynamic>>.from(
+        _lastMemberCandidates,
+      );
+      _candidateMemos = [];
+      _conversationContext = _lastMemberSelectionContext;
+      _isWaitingForNumberResponse = true;
+      _isConfirmationStep = false;
+      _lastSearchKeyword = _lastMemberSearchKeyword;
+      _currentMember = null;
+      _currentMemo = null;
+      _selectedIds.clear();
+      _currentState = VoiceState.ready;
+    });
+
+    await _speak('번호로 다시 선택해주세요.');
+  }
+
   void _cancelConversation() {
+    _commandEpoch++;
+    _ignoreListenEnd = true;
     _flutterTts.stop();
     if (_speech.isListening) _speech.stop();
     _stopAnimations();
@@ -828,12 +1256,21 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
       _isConfirmationStep = false;
       _isWaitingForNumberResponse = false;
       _lastSearchKeyword = null;
+      _lastMemberCandidates = [];
+      _lastMemberSelectionContext = null;
+      _lastMemberSearchKeyword = null;
       _currentMember = null;
       _currentMemo = null;
       _pendingUserText = '';
+      _lastSpokenText = '';
+      _lastUserCommand = '';
+      _pinnedResult = null;
+      _showRecoveryExamples = false;
       _chatMessages.clear();
       _currentState = VoiceState.ready;
       _statusMessage = '마이크 버튼을 눌러 시작하세요';
+      _errorNextAction = null;
+      _lastErrorGuidance = null;
     });
   }
 
@@ -846,91 +1283,7 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
     });
   }
 
-  int? _parseNumberFromText(String text) {
-    final normalized = text.trim().toLowerCase();
-
-    final Map<String, int> numberMap = {
-      '1': 1,
-      '2': 2,
-      '3': 3,
-      '4': 4,
-      '5': 5,
-      '6': 6,
-      '7': 7,
-      '8': 8,
-      '9': 9,
-      '10': 10,
-      '1번': 1,
-      '2번': 2,
-      '3번': 3,
-      '4번': 4,
-      '5번': 5,
-      '6번': 6,
-      '7번': 7,
-      '8번': 8,
-      '9번': 9,
-      '10번': 10,
-      '일': 1,
-      '이': 2,
-      '삼': 3,
-      '사': 4,
-      '오': 5,
-      '육': 6,
-      '칠': 7,
-      '팔': 8,
-      '구': 9,
-      '십': 10,
-      '일번': 1,
-      '이번': 2,
-      '삼번': 3,
-      '사번': 4,
-      '오번': 5,
-      '육번': 6,
-      '칠번': 7,
-      '팔번': 8,
-      '구번': 9,
-      '십번': 10,
-      '첫번째': 1,
-      '두번째': 2,
-      '세번째': 3,
-      '네번째': 4,
-      '다섯번째': 5,
-      '여섯번째': 6,
-      '일곱번째': 7,
-      '여덟번째': 8,
-      '아홉번째': 9,
-      '열번째': 10,
-      '첫째': 1,
-      '둘째': 2,
-      '셋째': 3,
-      '넷째': 4,
-      '다섯째': 5,
-      '하나': 1,
-      '둘': 2,
-      '셋': 3,
-      '넷': 4,
-      '다섯': 5,
-      '여섯': 6,
-      '일곱': 7,
-      '여덟': 8,
-      '아홉': 9,
-      '열': 10,
-    };
-
-    if (numberMap.containsKey(normalized)) return numberMap[normalized];
-
-    final match = RegExp(r'^(\d+)').firstMatch(normalized);
-    if (match != null) {
-      final parsed = int.tryParse(match.group(1)!);
-      if (parsed != null && parsed >= 1 && parsed <= 10) return parsed;
-    }
-
-    for (final entry in numberMap.entries) {
-      if (normalized.contains(entry.key)) return entry.value;
-    }
-
-    return null;
-  }
+  int? _parseNumberFromText(String text) => parseVoiceSelectionNumber(text);
 
   String _buildCandidateTtsMessage(String entityType) {
     final candidates = entityType == 'member'
@@ -971,12 +1324,13 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
 
   @override
   void dispose() {
+    _disposing = true;
+    _speech.stop();
+    _flutterTts.stop();
     _pulseController.dispose();
     _waveController.dispose();
     _processingController.dispose();
     _chatScrollController.dispose();
-    _speech.stop();
-    _flutterTts.stop();
     super.dispose();
   }
 
@@ -996,6 +1350,7 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
               'assets/images/app_logo2.png',
               height: screenHeight * 0.04,
               fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
             );
           },
         ),
@@ -1013,6 +1368,9 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
                   ? _buildEmptyState()
                   : _buildChatView(),
             ),
+            if (_pinnedResult != null) _buildPinnedResultPanel(),
+            if (_currentMember != null) _buildMemberInfoCard(),
+            if (_shouldShowRecoveryExamples) _buildRecoveryExamples(),
             if (_candidateMembers.isNotEmpty || _candidateMemos.isNotEmpty)
               _buildCandidateSelector(),
             if (_isConfirmationStep) _buildConfirmationButtons(),
@@ -1060,7 +1418,7 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
                     Icon(Icons.close, size: screenWidth * 0.04, color: ThemeColor.error),
                     SizedBox(width: screenWidth * 0.01),
                     Text(
-                      '취소',
+                      '처음으로',
                       style: TextStyle(
                         fontSize: screenWidth * 0.033,
                         fontWeight: FontWeight.w600,
@@ -1098,15 +1456,21 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
 
           // 설정 버튼들
           _buildSettingChip(
+            key: kVoiceAutoRestartChipKey,
             icon: Icons.repeat,
-            label: _autoRestart ? 'ON' : 'OFF',
+            label: _autoRestart ? '대화만' : '수동',
             isActive: _autoRestart,
-            onTap: () => setState(() {
-              _autoRestart = !_autoRestart;
-              if (_autoRestart && _currentState == VoiceState.ready) {
+            semanticLabel: _autoRestart
+                ? '자동 듣기: 번호와 확인만. 브리핑 뒤에는 마이크를 누르세요'
+                : '자동 듣기 꺼짐. 말할 때마다 마이크를 누르세요',
+            onTap: () {
+              setState(() => _autoRestart = !_autoRestart);
+              if (_autoRestart &&
+                  _currentState == VoiceState.ready &&
+                  _shouldAutoRestartListening()) {
                 _startListening();
               }
-            }),
+            },
           ),
           SizedBox(width: screenWidth * 0.02),
           _buildSpeedSelector(),
@@ -1116,39 +1480,52 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
   }
 
   Widget _buildSettingChip({
+    Key? key,
     required IconData icon,
     required String label,
     required bool isActive,
     required VoidCallback onTap,
+    String? semanticLabel,
   }) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.025, vertical: screenHeight * 0.008),
-        decoration: BoxDecoration(
-          color: isActive ? ThemeColor.primarySurface : ThemeColor.neutral100,
-          borderRadius: BorderRadius.circular(screenWidth * 0.04),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: screenWidth * 0.035,
-              color: isActive ? ThemeColor.primary : ThemeColor.textTertiary,
+    return Semantics(
+      button: true,
+      label: semanticLabel ?? label,
+      child: GestureDetector(
+        key: key,
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            minHeight: kVoiceMinTouchTarget,
+            minWidth: kVoiceMinTouchTarget,
+          ),
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.025),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: isActive ? ThemeColor.primarySurface : ThemeColor.neutral100,
+              borderRadius: BorderRadius.circular(screenWidth * 0.04),
             ),
-            SizedBox(width: screenWidth * 0.01),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: screenWidth * 0.03,
-                fontWeight: FontWeight.w600,
-                color: isActive ? ThemeColor.primary : ThemeColor.textTertiary,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: screenWidth * 0.035,
+                  color: isActive ? ThemeColor.primary : ThemeColor.textTertiary,
+                ),
+                SizedBox(width: screenWidth * 0.01),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: screenWidth * 0.03,
+                    fontWeight: FontWeight.w600,
+                    color: isActive ? ThemeColor.primary : ThemeColor.textTertiary,
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -1160,8 +1537,14 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
     return PopupMenuButton<double>(
       offset: Offset(0, screenHeight * 0.05),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(screenWidth * 0.03)),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.025, vertical: screenHeight * 0.008),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          minHeight: kVoiceMinTouchTarget,
+          minWidth: kVoiceMinTouchTarget,
+        ),
+        child: Container(
+        padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.025),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           color: ThemeColor.neutral100,
           borderRadius: BorderRadius.circular(screenWidth * 0.04),
@@ -1173,9 +1556,9 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
             SizedBox(width: screenWidth * 0.01),
             Text(
               _ttsSpeed == 0.3
-                  ? '느림'
+                  ? '느리게'
                   : _ttsSpeed == 0.7
-                  ? '빠름'
+                  ? '빠르게'
                   : '보통',
               style: TextStyle(
                 fontSize: screenWidth * 0.03,
@@ -1184,6 +1567,7 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
               ),
             ),
           ],
+        ),
         ),
       ),
       onSelected: (speed) async {
@@ -1221,14 +1605,13 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
   Widget _buildEmptyState() {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-    final bottomNavPadding = MainScreen.navBarHeight + MediaQuery.of(context).padding.bottom;
 
     return SingleChildScrollView(
       padding: EdgeInsets.only(
         left: screenWidth * 0.05,
         right: screenWidth * 0.05,
         top: screenWidth * 0.05,
-        bottom: bottomNavPadding,
+        bottom: screenWidth * 0.05,
       ),
       child: Column(
         children: [
@@ -1239,105 +1622,7 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
 
           SizedBox(height: screenHeight * 0.03),
 
-          // 명령어 예시
-          Container(
-            width: double.infinity,
-            padding: EdgeInsets.all(screenWidth * 0.05),
-            decoration: BoxDecoration(
-              color: ThemeColor.surface,
-              borderRadius: BorderRadius.circular(screenWidth * 0.04),
-              border: Border.all(color: ThemeColor.border),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.lightbulb_outline,
-                      size: screenWidth * 0.05,
-                      color: ThemeColor.warning,
-                    ),
-                    SizedBox(width: screenWidth * 0.02),
-                    Text(
-                      '이렇게 말해보세요',
-                      style: TextStyle(
-                        fontSize: screenWidth * 0.0375,
-                        fontWeight: FontWeight.w600,
-                        color: ThemeColor.textPrimary,
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: screenHeight * 0.02),
-                ...List.generate(_commandExamples.length, (index) {
-                  final example = _commandExamples[index];
-                  return Padding(
-                    padding: EdgeInsets.only(
-                      bottom: index < _commandExamples.length - 1 ? screenHeight * 0.015 : 0,
-                    ),
-                    child: GestureDetector(
-                      onTap: () => _processVoiceCommand(example.text),
-                      child: Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: screenWidth * 0.03,
-                          vertical: screenHeight * 0.012,
-                        ),
-                        decoration: BoxDecoration(
-                          color: ThemeColor.neutral50,
-                          borderRadius: BorderRadius.circular(screenWidth * 0.025),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: EdgeInsets.all(screenWidth * 0.015),
-                              decoration: BoxDecoration(
-                                color: ThemeColor.primarySurface,
-                                borderRadius: BorderRadius.circular(screenWidth * 0.015),
-                              ),
-                              child: Icon(
-                                example.icon,
-                                size: screenWidth * 0.04,
-                                color: ThemeColor.primary,
-                              ),
-                            ),
-                            SizedBox(width: screenWidth * 0.03),
-                            Expanded(
-                              child: Text(
-                                '"${example.text}"',
-                                style: TextStyle(
-                                  fontSize: screenWidth * 0.035,
-                                  color: ThemeColor.textPrimary,
-                                ),
-                              ),
-                            ),
-                            Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: screenWidth * 0.02,
-                                vertical: screenHeight * 0.003,
-                              ),
-                              decoration: BoxDecoration(
-                                color: ThemeColor.accentSurface,
-                                borderRadius: BorderRadius.circular(screenWidth * 0.01),
-                              ),
-                              child: Text(
-                                example.category,
-                                style: TextStyle(
-                                  fontSize: screenWidth * 0.028,
-                                  fontWeight: FontWeight.w500,
-                                  color: ThemeColor.accent,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }),
-              ],
-            ),
-          ),
+          _buildCommandExamplesCard(showListenHint: true),
 
           // 최근 조회 회원
           if (_recentMembers.isNotEmpty) ...[
@@ -1384,7 +1669,17 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
         icon = Icons.mic_none;
     }
 
-    return Container(
+    return GestureDetector(
+      key: kVoiceStatusCardKey,
+      onTap: () {
+        if (_currentState == VoiceState.ready) {
+          _startListening();
+        } else if (_currentState == VoiceState.error ||
+            _currentState == VoiceState.permissionDenied) {
+          _handleMicButtonTap();
+        }
+      },
+      child: Container(
       width: double.infinity,
       padding: EdgeInsets.all(screenWidth * 0.06),
       decoration: BoxDecoration(
@@ -1411,6 +1706,7 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
           SizedBox(height: screenHeight * 0.02),
           Text(
             _statusMessage,
+            key: kVoiceStatusMessageKey,
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: screenWidth * 0.04,
@@ -1418,6 +1714,18 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
               color: iconColor,
             ),
           ),
+          if (_errorNextAction != null) ...[
+            SizedBox(height: screenHeight * 0.01),
+            Text(
+              _errorNextAction!,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: screenWidth * 0.033,
+                fontWeight: FontWeight.w500,
+                color: iconColor,
+              ),
+            ),
+          ],
           if (_currentState == VoiceState.permissionDenied) ...[
             SizedBox(height: screenHeight * 0.015),
             ElevatedButton.icon(
@@ -1435,6 +1743,7 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
           ],
         ],
       ),
+    ),
     );
   }
 
@@ -1544,11 +1853,9 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
 
   Widget _buildChatView() {
     final screenWidth = MediaQuery.of(context).size.width;
-    final bottomNavPadding = MainScreen.navBarHeight + MediaQuery.of(context).padding.bottom;
     final hasPending = _pendingUserText.isNotEmpty;
-    final memberOffset = _currentMember != null ? 1 : 0;
     final pendingOffset = hasPending ? 1 : 0;
-    final totalCount = _chatMessages.length + memberOffset + pendingOffset;
+    final totalCount = _chatMessages.length + pendingOffset;
 
     return ListView.builder(
       controller: _chatScrollController,
@@ -1556,24 +1863,296 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
         left: screenWidth * 0.04,
         right: screenWidth * 0.04,
         top: screenWidth * 0.04,
-        bottom: bottomNavPadding,
+        bottom: screenWidth * 0.04,
       ),
       itemCount: totalCount,
       itemBuilder: (context, index) {
-        if (_currentMember != null && index == 0) {
-          return _buildMemberInfoCard();
-        }
-
-        final msgIndex = index - memberOffset;
-
-        // 마지막 아이템이 실시간 입력 버블
-        if (hasPending && msgIndex == _chatMessages.length) {
+        if (hasPending && index == _chatMessages.length) {
           return _buildPendingBubble();
         }
 
-        final message = _chatMessages[msgIndex];
+        final message = _chatMessages[index];
         return _buildChatBubble(message);
       },
+    );
+  }
+
+  Widget _buildCommandExamplesCard({
+    Key? key,
+    bool showListenHint = false,
+    bool compact = false,
+  }) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final pad = compact ? screenWidth * 0.035 : screenWidth * 0.05;
+
+    return Container(
+      key: key,
+      width: double.infinity,
+      padding: EdgeInsets.all(pad),
+      decoration: BoxDecoration(
+        color: ThemeColor.surface,
+        borderRadius: BorderRadius.circular(screenWidth * 0.04),
+        border: Border.all(color: ThemeColor.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.lightbulb_outline,
+                size: screenWidth * 0.05,
+                color: ThemeColor.warning,
+              ),
+              SizedBox(width: screenWidth * 0.02),
+              Text(
+                '이렇게 말해보세요',
+                style: TextStyle(
+                  fontSize: screenWidth * 0.0375,
+                  fontWeight: FontWeight.w600,
+                  color: ThemeColor.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: compact ? screenHeight * 0.012 : screenHeight * 0.02),
+          ...List.generate(_commandExamples.length, (index) {
+            final example = _commandExamples[index];
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: index < _commandExamples.length - 1
+                    ? (compact ? screenHeight * 0.008 : screenHeight * 0.015)
+                    : 0,
+              ),
+              child: GestureDetector(
+                onTap: () => _processVoiceCommand(example.text),
+                child: Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: screenWidth * 0.03,
+                    vertical: compact ? screenHeight * 0.008 : screenHeight * 0.012,
+                  ),
+                  decoration: BoxDecoration(
+                    color: ThemeColor.neutral50,
+                    borderRadius: BorderRadius.circular(screenWidth * 0.025),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: EdgeInsets.all(screenWidth * 0.015),
+                        decoration: BoxDecoration(
+                          color: ThemeColor.primarySurface,
+                          borderRadius: BorderRadius.circular(screenWidth * 0.015),
+                        ),
+                        child: Icon(
+                          example.icon,
+                          size: screenWidth * 0.04,
+                          color: ThemeColor.primary,
+                        ),
+                      ),
+                      SizedBox(width: screenWidth * 0.03),
+                      Expanded(
+                        child: Text(
+                          '"${example.text}"',
+                          style: TextStyle(
+                            fontSize: screenWidth * 0.035,
+                            color: ThemeColor.textPrimary,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: screenWidth * 0.02,
+                          vertical: screenHeight * 0.003,
+                        ),
+                        decoration: BoxDecoration(
+                          color: ThemeColor.accentSurface,
+                          borderRadius: BorderRadius.circular(screenWidth * 0.01),
+                        ),
+                        child: Text(
+                          example.category,
+                          style: TextStyle(
+                            fontSize: screenWidth * 0.028,
+                            fontWeight: FontWeight.w500,
+                            color: ThemeColor.accent,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+          if (showListenHint) ...[
+            SizedBox(height: screenHeight * 0.015),
+            Text(
+              '브리핑을 들은 뒤에는 마이크를 누르세요. 회원 번호와 예/아니오는 자동으로 듣습니다.',
+              key: kVoiceListenPolicyHintKey,
+              style: TextStyle(
+                fontSize: screenWidth * 0.032,
+                height: 1.4,
+                color: ThemeColor.textSecondary,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPinnedResultPanel() {
+    final result = _pinnedResult;
+    if (result == null) return const SizedBox.shrink();
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final canReplay = _lastSpokenText.isNotEmpty &&
+        _currentState != VoiceState.processing &&
+        _currentState != VoiceState.permissionDenied &&
+        _currentState != VoiceState.speaking;
+
+    return Container(
+      key: kVoiceResultPanelKey,
+      width: double.infinity,
+      margin: EdgeInsets.fromLTRB(
+        screenWidth * 0.04,
+        0,
+        screenWidth * 0.04,
+        screenHeight * 0.01,
+      ),
+      padding: EdgeInsets.all(screenWidth * 0.04),
+      decoration: BoxDecoration(
+        color: ThemeColor.surface,
+        borderRadius: BorderRadius.circular(screenWidth * 0.04),
+        border: Border.all(color: ThemeColor.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            result.title,
+            style: TextStyle(
+              fontSize: screenWidth * 0.033,
+              fontWeight: FontWeight.w700,
+              color: ThemeColor.textSecondary,
+            ),
+          ),
+          SizedBox(height: screenHeight * 0.012),
+          if (result.metrics.isNotEmpty)
+            KeyedSubtree(
+              key: kVoiceResultMetricsKey,
+              child: Row(
+                children: [
+                  for (var i = 0; i < result.metrics.length; i++) ...[
+                    if (i > 0) SizedBox(width: screenWidth * 0.02),
+                    Expanded(child: _buildMetricCard(result.metrics[i])),
+                  ],
+                ],
+              ),
+            )
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    result.spokenText,
+                    key: kVoiceResultLineKey,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: screenWidth * 0.0375,
+                      height: 1.4,
+                      color: ThemeColor.textPrimary,
+                    ),
+                  ),
+                ),
+                if (canReplay) ...[
+                  SizedBox(width: screenWidth * 0.02),
+                  Semantics(
+                    button: true,
+                    label: '다시 듣기',
+                    child: GestureDetector(
+                      onTap: _replayLastSpeech,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          minHeight: kVoiceMinTouchTarget,
+                          minWidth: kVoiceMinTouchTarget,
+                        ),
+                        child: Icon(
+                          Icons.replay,
+                          color: ThemeColor.primary,
+                          size: screenWidth * 0.055,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricCard(VoiceMetricField field) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    return Container(
+      padding: EdgeInsets.symmetric(
+        vertical: screenHeight * 0.012,
+        horizontal: screenWidth * 0.01,
+      ),
+      decoration: BoxDecoration(
+        color: ThemeColor.neutral50,
+        borderRadius: BorderRadius.circular(screenWidth * 0.025),
+      ),
+      child: Column(
+        children: [
+          Text(
+            '${field.value}${field.unit}',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: screenWidth * 0.045,
+              fontWeight: FontWeight.w700,
+              color: ThemeColor.textPrimary,
+            ),
+          ),
+          SizedBox(height: screenHeight * 0.004),
+          Text(
+            field.label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: screenWidth * 0.03,
+              fontWeight: FontWeight.w600,
+              color: ThemeColor.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecoveryExamples() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        screenWidth * 0.04,
+        0,
+        screenWidth * 0.04,
+        screenHeight * 0.01,
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: screenHeight * 0.32),
+        child: SingleChildScrollView(
+          child: _buildCommandExamplesCard(
+            key: kVoiceRecoveryExamplesKey,
+            compact: true,
+          ),
+        ),
+      ),
     );
   }
 
@@ -1583,7 +2162,13 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
     return Container(
-      margin: EdgeInsets.only(bottom: screenHeight * 0.02),
+      key: kVoicePinnedMemberCardKey,
+      margin: EdgeInsets.fromLTRB(
+        screenWidth * 0.04,
+        0,
+        screenWidth * 0.04,
+        screenHeight * 0.01,
+      ),
       padding: EdgeInsets.all(screenWidth * 0.04),
       decoration: BoxDecoration(
         color: ThemeColor.surface,
@@ -1640,23 +2225,51 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
                   ],
                 ),
               ),
-              Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: screenWidth * 0.025,
-                  vertical: screenHeight * 0.005,
-                ),
-                decoration: BoxDecoration(
-                  color: ThemeColor.successSurface,
-                  borderRadius: BorderRadius.circular(screenWidth * 0.03),
-                ),
-                child: Text(
-                  _currentMember!.grade ?? '일반',
-                  style: TextStyle(
-                    fontSize: screenWidth * 0.03,
-                    fontWeight: FontWeight.w600,
-                    color: ThemeColor.success,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: screenWidth * 0.025,
+                      vertical: screenHeight * 0.005,
+                    ),
+                    decoration: BoxDecoration(
+                      color: ThemeColor.successSurface,
+                      borderRadius: BorderRadius.circular(screenWidth * 0.03),
+                    ),
+                    child: Text(
+                      _currentMember!.grade ?? '일반',
+                      style: TextStyle(
+                        fontSize: screenWidth * 0.03,
+                        fontWeight: FontWeight.w600,
+                        color: ThemeColor.success,
+                      ),
+                    ),
                   ),
-                ),
+                  if (_canReselectMember) ...[
+                    SizedBox(height: screenHeight * 0.008),
+                    GestureDetector(
+                      key: kVoiceReselectMemberKey,
+                      onTap: _restoreMemberCandidates,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          minHeight: kVoiceMinTouchTarget,
+                        ),
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            '다른 회원',
+                            style: TextStyle(
+                              fontSize: screenWidth * 0.033,
+                              fontWeight: FontWeight.w600,
+                              color: ThemeColor.primary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ],
           ),
@@ -1823,7 +2436,7 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
           ),
           SizedBox(height: screenHeight * 0.015),
           SizedBox(
-            height: screenHeight * 0.1,
+            height: screenHeight * 0.12,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: candidates.length,
@@ -1850,6 +2463,7 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
                       ),
                     ),
                     child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
@@ -1920,47 +2534,69 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
   Widget _buildConfirmationButtons() {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
+    final prompt = _lastSpokenText.isNotEmpty
+        ? _lastSpokenText
+        : '이 작업을 진행할까요?';
+    final isDestructive = prompt.contains('삭제');
     return Container(
       padding: EdgeInsets.all(screenWidth * 0.04),
       decoration: BoxDecoration(
         color: ThemeColor.surface,
         border: Border(top: BorderSide(color: ThemeColor.border)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: OutlinedButton(
-              onPressed: () => _handleConfirmationResponse(false),
-              style: OutlinedButton.styleFrom(
-                padding: EdgeInsets.symmetric(vertical: screenHeight * 0.018),
-                side: BorderSide(color: ThemeColor.border),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(screenWidth * 0.03),
-                ),
-              ),
-              child: Text(
-                '아니오',
-                style: TextStyle(fontSize: screenWidth * 0.0375, fontWeight: FontWeight.w600),
-              ),
+          Text(
+            prompt,
+            key: kVoiceConfirmationPromptKey,
+            style: TextStyle(
+              fontSize: screenWidth * 0.033,
+              fontWeight: FontWeight.w600,
+              color: ThemeColor.textPrimary,
             ),
           ),
-          SizedBox(width: screenWidth * 0.03),
-          Expanded(
-            child: ElevatedButton(
-              onPressed: () => _handleConfirmationResponse(true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: ThemeColor.primary,
-                foregroundColor: Colors.white,
-                padding: EdgeInsets.symmetric(vertical: screenHeight * 0.018),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(screenWidth * 0.03),
+          SizedBox(height: screenHeight * 0.012),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => _handleConfirmationResponse(false),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(kVoiceMinTouchTarget),
+                    padding: EdgeInsets.symmetric(vertical: screenHeight * 0.018),
+                    side: BorderSide(color: ThemeColor.border),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(screenWidth * 0.03),
+                    ),
+                  ),
+                  child: Text(
+                    '아니오',
+                    style: TextStyle(fontSize: screenWidth * 0.0375, fontWeight: FontWeight.w600),
+                  ),
                 ),
               ),
-              child: Text(
-                '예',
-                style: TextStyle(fontSize: screenWidth * 0.0375, fontWeight: FontWeight.w600),
+              SizedBox(width: screenWidth * 0.03),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => _handleConfirmationResponse(true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor:
+                        isDestructive ? ThemeColor.error : ThemeColor.primary,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(kVoiceMinTouchTarget),
+                    padding: EdgeInsets.symmetric(vertical: screenHeight * 0.018),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(screenWidth * 0.03),
+                    ),
+                  ),
+                  child: Text(
+                    '예',
+                    style: TextStyle(fontSize: screenWidth * 0.0375, fontWeight: FontWeight.w600),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ],
       ),
@@ -1975,7 +2611,20 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
         _conversationContext != null ||
         _candidateMembers.isNotEmpty ||
         _candidateMemos.isNotEmpty ||
-        _isConfirmationStep;
+        _isConfirmationStep ||
+        _currentState == VoiceState.processing;
+    final bool showCompactStatus =
+        _chatMessages.isNotEmpty ||
+        _pendingUserText.isNotEmpty ||
+        _candidateMembers.isNotEmpty ||
+        _candidateMemos.isNotEmpty;
+    final bool canReplay =
+        _lastSpokenText.isNotEmpty &&
+        _currentState != VoiceState.processing &&
+        _currentState != VoiceState.permissionDenied &&
+        _currentState != VoiceState.speaking;
+    final bool showReplayButton = canReplay && !showCancelButton;
+    final bool showReplayBesideCancel = canReplay && showCancelButton;
 
     return Container(
       padding: EdgeInsets.fromLTRB(screenWidth * 0.05, screenHeight * 0.02, screenWidth * 0.05, screenHeight * 0.025),
@@ -1995,6 +2644,58 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (showCompactStatus) ...[
+              Padding(
+                padding: EdgeInsets.only(bottom: screenHeight * 0.012),
+                child: Text(
+                  _getCompactStatusMessage(),
+                  key: kVoiceCompactStatusKey,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: screenWidth * 0.033,
+                    fontWeight: FontWeight.w600,
+                    color: (_currentState == VoiceState.error ||
+                            _currentState == VoiceState.permissionDenied)
+                        ? ThemeColor.error
+                        : ThemeColor.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+            if (_errorNextAction != null &&
+                (_currentState == VoiceState.error ||
+                    _currentState == VoiceState.permissionDenied ||
+                    _currentState == VoiceState.speaking)) ...[
+              Padding(
+                padding: EdgeInsets.only(bottom: screenHeight * 0.012),
+                child: Column(
+                  children: [
+                    if (_currentState == VoiceState.error) ...[
+                      Text(
+                        _statusMessage,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: screenWidth * 0.033,
+                          fontWeight: FontWeight.w600,
+                          color: ThemeColor.error,
+                        ),
+                      ),
+                      SizedBox(height: screenHeight * 0.006),
+                    ],
+                    Text(
+                      _errorNextAction!,
+                      key: kVoiceErrorNextActionKey,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: screenWidth * 0.033,
+                        fontWeight: FontWeight.w600,
+                        color: ThemeColor.error,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             // 후보 선택 모드 안내
             if (_isWaitingForNumberResponse)
               Container(
@@ -2035,41 +2736,40 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
                 // 왼쪽: 취소 버튼 또는 빈 공간
                 Expanded(
                   child: showCancelButton
-                      ? GestureDetector(
-                          onTap: _cancelConversation,
-                          child: Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: screenWidth * 0.04,
-                              vertical: screenHeight * 0.012,
+                      ? Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildDockAction(
+                              label: '처음으로',
+                              icon: Icons.close,
+                              color: ThemeColor.error,
+                              background: ThemeColor.errorSurface,
+                              border: ThemeColor.error.withValues(alpha: 0.3),
+                              onTap: _cancelConversation,
                             ),
-                            decoration: BoxDecoration(
-                              color: ThemeColor.errorSurface,
-                              borderRadius: BorderRadius.circular(screenWidth * 0.06),
-                              border: Border.all(
-                                color: ThemeColor.error.withValues(alpha: 0.3),
+                            if (showReplayBesideCancel) ...[
+                              SizedBox(height: screenHeight * 0.008),
+                              _buildDockAction(
+                                key: kVoiceReplayButtonKey,
+                                label: '다시 듣기',
+                                icon: Icons.replay,
+                                color: ThemeColor.primary,
+                                background: ThemeColor.primarySurface,
+                                border: ThemeColor.primary.withValues(alpha: 0.3),
+                                onTap: _replayLastSpeech,
                               ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.close,
-                                  size: screenWidth * 0.04,
-                                  color: ThemeColor.error,
-                                ),
-                                SizedBox(width: screenWidth * 0.015),
-                                Text(
-                                  '처음으로',
-                                  style: TextStyle(
-                                    fontSize: screenWidth * 0.033,
-                                    fontWeight: FontWeight.w600,
-                                    color: ThemeColor.error,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                            ],
+                          ],
+                        )
+                      : showReplayButton
+                      ? _buildDockAction(
+                          key: kVoiceReplayButtonKey,
+                          label: '다시 듣기',
+                          icon: Icons.replay,
+                          color: ThemeColor.primary,
+                          background: ThemeColor.primarySurface,
+                          border: ThemeColor.primary.withValues(alpha: 0.3),
+                          onTap: _replayLastSpeech,
                         )
                       : const SizedBox(),
                 ),
@@ -2077,7 +2777,11 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
                 SizedBox(width: screenWidth * 0.04),
 
                 // 중앙: 마이크 버튼
-                GestureDetector(
+                Semantics(
+                  button: true,
+                  label: _micSemanticsLabel(),
+                  child: GestureDetector(
+                  key: kVoiceMicButtonKey,
                   onTap: _handleMicButtonTap,
                   child: AnimatedBuilder(
                     animation: _pulseAnimation,
@@ -2125,49 +2829,20 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
                     },
                   ),
                 ),
+                ),
 
                 SizedBox(width: screenWidth * 0.04),
 
                 // 오른쪽: TTS 건너뛰기 버튼 또는 상태 텍스트
                 Expanded(
                   child: showSkipButton
-                      ? GestureDetector(
+                      ? _buildDockAction(
+                          label: '건너뛰기',
+                          icon: Icons.skip_next,
+                          color: ThemeColor.warning,
+                          background: ThemeColor.warningSurface,
+                          border: ThemeColor.warning.withValues(alpha: 0.3),
                           onTap: _stopTtsAndStartListening,
-                          child: Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: screenWidth * 0.04,
-                              vertical: screenHeight * 0.012,
-                            ),
-                            decoration: BoxDecoration(
-                              color: ThemeColor.warningSurface,
-                              borderRadius: BorderRadius.circular(screenWidth * 0.06),
-                              border: Border.all(
-                                color: ThemeColor.warning.withValues(
-                                  alpha: 0.3,
-                                ),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.skip_next,
-                                  size: screenWidth * 0.04,
-                                  color: ThemeColor.warning,
-                                ),
-                                SizedBox(width: screenWidth * 0.015),
-                                Text(
-                                  '건너뛰기',
-                                  style: TextStyle(
-                                    fontSize: screenWidth * 0.033,
-                                    fontWeight: FontWeight.w600,
-                                    color: ThemeColor.warning,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
                         )
                       : Center(
                           child: Text(
@@ -2188,6 +2863,74 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
     );
   }
 
+  Widget _buildDockAction({
+    Key? key,
+    required String label,
+    required IconData icon,
+    required Color color,
+    required Color background,
+    required Color border,
+    required VoidCallback onTap,
+  }) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    return Semantics(
+      button: true,
+      label: label,
+      child: GestureDetector(
+        key: key,
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: kVoiceMinTouchTarget),
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.04),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: background,
+              borderRadius: BorderRadius.circular(screenWidth * 0.06),
+              border: Border.all(color: border),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: screenWidth * 0.04, color: color),
+                SizedBox(width: screenWidth * 0.015),
+                Flexible(
+                  child: Text(
+                    label,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: screenWidth * 0.033,
+                      fontWeight: FontWeight.w600,
+                      color: color,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _micSemanticsLabel() {
+    switch (_currentState) {
+      case VoiceState.listening:
+        return '듣고 있습니다. 누르면 중지합니다';
+      case VoiceState.speaking:
+        return '읽고 있습니다. 누르면 말을 시작합니다';
+      case VoiceState.processing:
+        return '분석 중입니다';
+      case VoiceState.error:
+        return '오류입니다. 누르면 다시 듣습니다';
+      case VoiceState.permissionDenied:
+        return '마이크 권한이 필요합니다';
+      case VoiceState.ready:
+        return '마이크. 누르면 듣기 시작합니다';
+    }
+  }
+
   String _getShortStatusMessage() {
     switch (_currentState) {
       case VoiceState.listening:
@@ -2195,13 +2938,41 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
       case VoiceState.speaking:
         return '말하는 중...';
       case VoiceState.processing:
-        return '처리 중...';
+        return '분석 중...';
       case VoiceState.error:
         return '오류 발생';
       case VoiceState.permissionDenied:
         return '권한 필요';
       default:
         return '탭하여 시작';
+    }
+  }
+
+  String _getCompactStatusMessage() {
+    switch (_currentState) {
+      case VoiceState.listening:
+        return '듣고 있습니다. 지금 말씀하세요';
+      case VoiceState.speaking:
+        return _lastErrorGuidance != null
+            ? '안내를 읽고 있습니다'
+            : '답변을 읽고 있습니다';
+      case VoiceState.processing:
+        return '분석 중...';
+      case VoiceState.error:
+        return _statusMessage;
+      case VoiceState.permissionDenied:
+        return '마이크 권한이 필요합니다';
+      default:
+        if (_isWaitingForNumberResponse) {
+          return '번호로 선택하세요. 안 들리면 마이크를 누르세요';
+        }
+        if (_isConfirmationStep) {
+          return '예 또는 아니오로 대답하세요';
+        }
+        if (_conversationContext?.currentStep?.stepType == 'content_input') {
+          return '지금 내용을 말씀하세요';
+        }
+        return '새 명령을 말하려면 마이크를 누르세요';
     }
   }
 
@@ -2252,9 +3023,19 @@ class _VoiceCommandScreenState extends State<VoiceCommandScreen>
         _showPermissionDeniedDialog();
         break;
       case VoiceState.error:
-        _checkPermissionsAndInitialize();
+        if (_speechAvailable) {
+          setState(() {
+            _currentState = VoiceState.ready;
+            _errorNextAction = null;
+            _lastErrorGuidance = null;
+            _statusMessage = '명령을 기다리고 있습니다';
+          });
+          _startListening();
+        } else {
+          _checkPermissionsAndInitialize();
+        }
         break;
-      default:
+      case VoiceState.processing:
         break;
     }
   }
@@ -2273,6 +3054,32 @@ class ChatMessage {
   });
 }
 
+class VoiceMetricField {
+  const VoiceMetricField({
+    required this.key,
+    required this.label,
+    required this.value,
+    required this.unit,
+  });
+
+  final String key;
+  final String label;
+  final int value;
+  final String unit;
+}
+
+class VoicePinnedResult {
+  const VoicePinnedResult({
+    required this.title,
+    required this.spokenText,
+    required this.metrics,
+  });
+
+  final String title;
+  final String spokenText;
+  final List<VoiceMetricField> metrics;
+}
+
 class CommandExample {
   final IconData icon;
   final String text;
@@ -2284,3 +3091,10 @@ class CommandExample {
     required this.category,
   });
 }
+
+final List<CommandExample> kVoiceOwnerCommandExamples = [
+  CommandExample(icon: Icons.today, text: '오늘 브리핑 알려줘', category: '브리핑'),
+  CommandExample(icon: Icons.bar_chart, text: '홈 통계 알려줘', category: '통계'),
+  CommandExample(icon: Icons.person, text: '홍길동 회원 찾아줘', category: '검색'),
+  CommandExample(icon: Icons.search, text: '1234번 회원 찾아줘', category: '검색'),
+];

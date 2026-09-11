@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:voca_crm/core/network/api_client.dart';
@@ -37,19 +38,38 @@ class VoiceCommandService {
         ? '/api/voice/command'   // 새 명령 (AI 분석 필요)
         : '/api/voice/continue'; // 대화 이어가기 (AI 분석 없음)
 
-    final response = await _apiClient.post(
-      endpoint,
-      body: requestBody,
-    );
+    try {
+      final response = await _apiClient
+          .post(
+            endpoint,
+            body: requestBody,
+          )
+          .timeout(
+            Duration(seconds: context == null ? 90 : 20),
+            onTimeout: () => throw TimeoutException('voice command timeout'),
+          );
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return VoiceCommandResponse.fromJson(data);
-    } else {
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return VoiceCommandResponse.fromJson(data);
+      }
+      if (response.statusCode == 429) {
+        throw VoiceCommandException(
+          '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.',
+          'RATE_LIMIT',
+        );
+      }
       final errorData = jsonDecode(response.body);
       throw VoiceCommandException(
         errorData['message'] ?? '음성 명령 처리 중 오류가 발생했습니다.',
         errorData['errorCode'],
+      );
+    } on VoiceCommandException {
+      rethrow;
+    } on TimeoutException {
+      throw VoiceCommandException(
+        'AI 서버가 응답하지 않습니다. 잠시 후 다시 시도해주세요.',
+        'AI_UNAVAILABLE',
       );
     }
   }
