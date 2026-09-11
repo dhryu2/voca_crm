@@ -667,6 +667,20 @@ class VoiceCommandServiceTest {
     }
 
     @Test
+    void error_PARSE_FAILURE면_AI불가_안내를_반환한다() {
+        stubDefaultBusinessPlace();
+        when(aiServerClient.analyzeCommand("홈 통계"))
+                .thenReturn(List.of(aiResult("ERROR", "PARSE_FAILURE", Map.of())));
+
+        VoiceCommandResponse response = voiceCommandService.processNewCommand(newCommandRequest("홈 통계"));
+
+        assertThat(response.getStatus()).isEqualTo("error");
+        assertThat(response.getErrorCode()).isEqualTo("AI_UNAVAILABLE");
+        assertThat(response.getMessage()).contains("다시 시도");
+        assertThat(response.getMessage()).doesNotContain("이해하지 못했습니다");
+    }
+
+    @Test
     void route_지원하지않는_카테고리면_UNSUPPORTED_CATEGORY를_반환한다() {
         stubDefaultBusinessPlace();
         when(aiServerClient.analyzeCommand("사업장 만들어"))
@@ -791,6 +805,70 @@ class VoiceCommandServiceTest {
 
         assertThat(response.getStatus()).isEqualTo("clarification_needed");
         assertThat(response.getMessage()).contains("다시 선택");
+    }
+
+    @Test
+    void continue_member_selection_첫번째_서수_발화면_첫_후보를_선택한다() {
+        Member first = buildMember(MEMBER_ID, "전수검사_김테스트", "8801", BUSINESS_PLACE_ID);
+        Member second = buildMember(MEMBER_ID_2, "전수검사_김테스트이", "8802", BUSINESS_PLACE_ID);
+        when(userRepository.findById(UUID.fromString(USER_ID)))
+                .thenReturn(Optional.of(User.builder().defaultBusinessPlaceId(BUSINESS_PLACE_ID).build()));
+        when(memberService.getMemberByIdWithUserCheck(MEMBER_ID, USER_ID)).thenReturn(first);
+        when(memoService.getLatestMemoByMemberId(MEMBER_ID, BUSINESS_PLACE_ID)).thenReturn(null);
+
+        Map<String, Object> additionalData = new HashMap<>();
+        additionalData.put("candidates", List.of(
+                Map.of("id", MEMBER_ID, "name", first.getName()),
+                Map.of("id", MEMBER_ID_2, "name", second.getName())));
+
+        Map<String, Object> originalIntent = new HashMap<>();
+        originalIntent.put("category", "MEMBER");
+        originalIntent.put("action", "SEARCH");
+        originalIntent.put("parameters", Map.of("searchCriteria", Map.of("name", "김테스트")));
+
+        ConversationContextDTO context = ConversationContextDTO.builder()
+                .currentStep(ConversationStep.builder().stepType("member_selection").build())
+                .additionalData(additionalData)
+                .originalIntent(originalIntent)
+                .build();
+
+        VoiceCommandResponse response = voiceCommandService.processContinuedConversation(
+                continueRequest("첫 번째", context));
+
+        assertThat(response.getStatus()).isEqualTo("completed");
+        assertThat(response.getMessage()).contains("전수검사_김테스트");
+        assertThat(response.getMessage()).doesNotContain("김테스트이");
+    }
+
+    @Test
+    void continue_member_selection_1번_발화면_첫_후보를_선택한다() {
+        Member first = buildMember(MEMBER_ID, "전수검사_김테스트", "8801", BUSINESS_PLACE_ID);
+        when(userRepository.findById(UUID.fromString(USER_ID)))
+                .thenReturn(Optional.of(User.builder().defaultBusinessPlaceId(BUSINESS_PLACE_ID).build()));
+        when(memberService.getMemberByIdWithUserCheck(MEMBER_ID, USER_ID)).thenReturn(first);
+        when(memoService.getLatestMemoByMemberId(MEMBER_ID, BUSINESS_PLACE_ID)).thenReturn(null);
+
+        Map<String, Object> additionalData = new HashMap<>();
+        additionalData.put("candidates", List.of(
+                Map.of("id", MEMBER_ID, "name", first.getName()),
+                Map.of("id", MEMBER_ID_2, "name", "전수검사_김테스트이")));
+
+        Map<String, Object> originalIntent = new HashMap<>();
+        originalIntent.put("category", "MEMBER");
+        originalIntent.put("action", "SEARCH");
+        originalIntent.put("parameters", Map.of("searchCriteria", Map.of("name", "김테스트")));
+
+        ConversationContextDTO context = ConversationContextDTO.builder()
+                .currentStep(ConversationStep.builder().stepType("member_selection").build())
+                .additionalData(additionalData)
+                .originalIntent(originalIntent)
+                .build();
+
+        VoiceCommandResponse response = voiceCommandService.processContinuedConversation(
+                continueRequest("1번", context));
+
+        assertThat(response.getStatus()).isEqualTo("completed");
+        assertThat(response.getMessage()).contains("전수검사_김테스트");
     }
 
     @Test

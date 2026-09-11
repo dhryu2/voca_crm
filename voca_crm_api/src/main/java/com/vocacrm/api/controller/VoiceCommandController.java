@@ -146,12 +146,11 @@ public class VoiceCommandController {
             @RequestParam(required = false) String businessPlaceId,
             jakarta.servlet.http.HttpServletRequest servletRequest) {
         try {
-            // JWT에서 userId 추출
+            // JWT에서 userId 추출. 기본 사업장은 JWT 클레임(로그인 시점 박제)이 아니라 DB 현재값.
             String userId = (String) servletRequest.getAttribute("userId");
 
-            // businessPlaceId가 없으면 defaultBusinessPlaceId 사용
             if (businessPlaceId == null) {
-                businessPlaceId = (String) servletRequest.getAttribute("defaultBusinessPlaceId");
+                businessPlaceId = accessControlService.currentDefaultBusinessPlace(userId);
             }
 
             // 대상 사업장에 대한 APPROVED 멤버십 검증 (타 사업장 데이터 유출 방지)

@@ -18,6 +18,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -81,6 +82,7 @@ public class AiServerClient {
                 .prompt(optimizedPrompt)
                 .stream(false)
                 .options(options)
+                .keepAlive("30m")
                 .build();
 
         int maxRetries = 2;
@@ -117,6 +119,10 @@ public class AiServerClient {
             } catch (Exception e) {
                 log.warn("AI server error (attempt {}): {}", attempt + 1, e.getMessage());
                 lastException = e;
+                // 콜드스타트 타임아웃을 2번 더 재시도하면 앱은 이미 끊겼는데 스레드만 90초를 점유한다.
+                if (isTimeout(e)) {
+                    break;
+                }
             }
 
             // 재시도 전 대기
@@ -156,7 +162,8 @@ public class AiServerClient {
                 List<AiAnalysisResult> results =
                         objectMapper.readValue(jsonString, new TypeReference<List<AiAnalysisResult>>() {});
                 if (results == null || results.isEmpty()) {
-                    return Collections.singletonList(createErrorResult("AI 응답 배열이 비어있습니다.", null));
+                    // 모델이 모호 발화에 [] 를 내는 경우. 통신 실패(PARSE_FAILURE)와 구분한다.
+                    return Collections.singletonList(createUnknownCommandResult());
                 }
                 return results;
             }
@@ -270,6 +277,17 @@ public class AiServerClient {
         return "ERROR".equalsIgnoreCase(result.getCategory()) && "PARSE_FAILURE".equals(result.getAction());
     }
 
+    private boolean isTimeout(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof TimeoutException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
     /**
      * 에러 결과 생성 (AI 응답 파싱 실패)
      */
@@ -291,6 +309,14 @@ public class AiServerClient {
     /**
      * 일일 사용량 초과 에러 결과 생성
      */
+    private AiAnalysisResult createUnknownCommandResult() {
+        AiAnalysisResult result = new AiAnalysisResult();
+        result.setCategory("ERROR");
+        result.setAction("UNKNOWN");
+        result.setParameters(Map.of("message", "명령을 이해하지 못했습니다. 다시 말씀해주세요."));
+        return result;
+    }
+
     private AiAnalysisResult createDailyLimitExceededResult() {
         AiAnalysisResult result = new AiAnalysisResult();
         result.setCategory("ERROR");

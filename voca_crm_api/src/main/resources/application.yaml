@@ -182,7 +182,7 @@ ai:
   server:
     url: ${AI_SERVER_URL:http://localhost:11434}  # Ollama 기본 포트(HTTP)
     model: ${AI_MODEL_NAME:voca-crm}
-    timeout: 30000                     # AI 서버 응답 타임아웃 (30초)
+    timeout: 60000                     # AI 서버 응답 타임아웃 (콜드스타트 포함, 재시도하지 않음)
   daily-limit:
     enabled: true                      # 일일 제한 활성화
     max-requests: 500                  # 일일 최대 AI 분석 요청 수 (로컬 AI 서버 부하 보호)

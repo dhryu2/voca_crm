@@ -164,16 +164,18 @@ class VoiceCommandControllerTest {
     }
 
     @Test
-    void getDailyBriefing_businessPlaceId가_없으면_기본_사업장을_사용한다() {
+    void getDailyBriefing_businessPlaceId가_없으면_DB기본사업장을_사용한다() {
         when(servletRequest.getAttribute("userId")).thenReturn(USER_ID);
-        when(servletRequest.getAttribute("defaultBusinessPlaceId")).thenReturn(BUSINESS_PLACE_ID);
+        when(accessControlService.currentDefaultBusinessPlace(USER_ID)).thenReturn(BUSINESS_PLACE_ID);
         VoiceCommandResponse serviceResponse = VoiceCommandResponse.builder().status("completed").build();
         when(voiceCommandService.generateDailyBriefing(USER_ID, BUSINESS_PLACE_ID)).thenReturn(serviceResponse);
 
         ResponseEntity<VoiceCommandResponse> response =
                 voiceCommandController.getDailyBriefing(null, servletRequest);
 
+        verify(accessControlService).currentDefaultBusinessPlace(USER_ID);
         verify(accessControlService).requireApprovedMembership(USER_ID, BUSINESS_PLACE_ID);
+        verify(voiceCommandService).generateDailyBriefing(USER_ID, BUSINESS_PLACE_ID);
         assertThat(response.getBody()).isSameAs(serviceResponse);
     }
 

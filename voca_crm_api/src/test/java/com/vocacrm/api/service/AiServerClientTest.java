@@ -25,6 +25,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.argThat;
 
 /**
  * AiServerClient는 WebClient(HTTP)와 Redis 기반 사용량 제한기에 의존한다.
@@ -170,6 +171,48 @@ class AiServerClientTest {
         verify(mono, times(3)).block();
     }
 
+    @Test
+    void analyzeCommand_타임아웃이면_재시도하지_않고_PARSE_FAILURE를_반환한다() {
+        when(dailyAiUsageLimiter.tryConsume()).thenReturn(true);
+        RuntimeException timeout = new RuntimeException(
+                new java.util.concurrent.TimeoutException(
+                        "Did not observe any item or terminal signal within 30000ms"));
+        stubWebClientChainThrowing(timeout);
+
+        List<AiAnalysisResult> results = aiServerClient.analyzeCommand("홈 통계");
+
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).getAction()).isEqualTo("PARSE_FAILURE");
+        verify(mono, times(1)).block();
+    }
+
+    @Test
+    void analyzeCommand_요청에_keep_alive를_넣는다() {
+        when(dailyAiUsageLimiter.tryConsume()).thenReturn(true);
+        stubWebClientChain(ollamaResponse("{\"category\":\"STATISTICS\",\"action\":\"GET_HOME\"}"));
+
+        aiServerClient.analyzeCommand("홈 통계");
+
+        verify(requestBodySpec).bodyValue(argThat(body ->
+                body instanceof com.vocacrm.api.dto.AiAnalysisRequest
+                        && "30m".equals(((com.vocacrm.api.dto.AiAnalysisRequest) body).getKeepAlive())));
+    }
+
+    @Test
+    void keepAlive는_Ollama가_기대하는_keep_alive키로_직렬화된다() throws Exception {
+        com.vocacrm.api.dto.AiAnalysisRequest request = com.vocacrm.api.dto.AiAnalysisRequest.builder()
+                .model("voca-crm")
+                .prompt("Input")
+                .stream(false)
+                .keepAlive("30m")
+                .build();
+
+        String json = new ObjectMapper().writeValueAsString(request);
+
+        assertThat(json).contains("\"keep_alive\":\"30m\"");
+        assertThat(json).doesNotContain("keepAlive");
+    }
+
     // ===== extractJsonFromResponse (리플렉션, 8단계 폴백) =====
 
     private String extractJson(String raw) throws Exception {
@@ -254,10 +297,11 @@ class AiServerClientTest {
     }
 
     @Test
-    void parseAiResponse_빈_배열이면_에러결과를_반환한다() throws Exception {
+    void parseAiResponse_빈_배열이면_UNKNOWN으로_매핑한다() throws Exception {
         List<AiAnalysisResult> results = parseAiResponse("[]");
         assertThat(results).hasSize(1);
-        assertThat(results.get(0).getParameters()).containsEntry("message", "AI 응답 배열이 비어있습니다.");
+        assertThat(results.get(0).getCategory()).isEqualTo("ERROR");
+        assertThat(results.get(0).getAction()).isEqualTo("UNKNOWN");
     }
 
     @Test

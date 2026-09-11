@@ -197,6 +197,9 @@ public class VoiceCommandService {
         } else if ("DAILY_LIMIT_EXCEEDED".equals(action)) {
             errorCode = "DAILY_LIMIT_EXCEEDED";
             message = "오늘의 AI 분석 사용량을 초과했습니다. 내일 다시 시도해주세요.";
+        } else if ("PARSE_FAILURE".equals(action)) {
+            errorCode = "AI_UNAVAILABLE";
+            message = "AI 서버가 응답하지 않습니다. 잠시 후 다시 시도해주세요.";
         } else {
             errorCode = "UNKNOWN_COMMAND";
             message = "명령을 이해하지 못했습니다. 다시 말씀해주세요.";
@@ -1042,11 +1045,19 @@ public class VoiceCommandService {
     }
 
     private List<String> extractSelectedIds(String text, ConversationContextDTO context) {
-        // UUID 형식이면 직접 반환
-        if (text.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")) {
-            return Collections.singletonList(text);
+        if (text == null || text.isBlank()) {
+            return Collections.emptyList();
+        }
+        String trimmed = text.trim();
+
+        // UUID 형식이면 직접 반환 (앱이 후보 탭 시 id를 보내는 경로)
+        if (trimmed.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")) {
+            return Collections.singletonList(trimmed);
         }
 
+        if (context.getAdditionalData() == null) {
+            return Collections.emptyList();
+        }
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> candidates = (List<Map<String, Object>>) context.getAdditionalData().get("candidates");
 
@@ -1054,15 +1065,58 @@ public class VoiceCommandService {
             return Collections.emptyList();
         }
 
-        return candidates.stream()
+        List<String> byName = candidates.stream()
                 .filter(candidate -> {
                     String name = (String) candidate.get("name");
                     String content = (String) candidate.get("content");
-                    return (name != null && text.contains(name)) ||
-                            (content != null && text.contains(content));
+                    return (name != null && trimmed.contains(name)) ||
+                            (content != null && trimmed.contains(content));
                 })
                 .map(candidate -> (String) candidate.get("id"))
                 .collect(Collectors.toList());
+        if (!byName.isEmpty()) {
+            return byName;
+        }
+
+        Integer index = parseSelectionIndex(trimmed, candidates.size());
+        if (index != null) {
+            Object id = candidates.get(index).get("id");
+            return id == null ? Collections.emptyList() : Collections.singletonList(id.toString());
+        }
+
+        return Collections.emptyList();
+    }
+
+    /**
+     * "첫 번째", "첫번째", "1번", "1" 같은 서수/번호 발화를 0-based 인덱스로 변환한다.
+     * 짧은 한글 수사("이")는 다른 단어에 포함될 수 있어 공백 제거 후 완전일치만 인정한다.
+     */
+    private Integer parseSelectionIndex(String text, int size) {
+        if (size <= 0) {
+            return null;
+        }
+        String normalized = text.toLowerCase().replaceAll("\\s+", "");
+        Map<String, Integer> ordinals = Map.ofEntries(
+                Map.entry("1", 1), Map.entry("2", 2), Map.entry("3", 3), Map.entry("4", 4), Map.entry("5", 5),
+                Map.entry("6", 6), Map.entry("7", 7), Map.entry("8", 8), Map.entry("9", 9), Map.entry("10", 10),
+                Map.entry("1번", 1), Map.entry("2번", 2), Map.entry("3번", 3), Map.entry("4번", 4), Map.entry("5번", 5),
+                Map.entry("6번", 6), Map.entry("7번", 7), Map.entry("8번", 8), Map.entry("9번", 9), Map.entry("10번", 10),
+                Map.entry("첫번째", 1), Map.entry("두번째", 2), Map.entry("세번째", 3), Map.entry("네번째", 4), Map.entry("다섯번째", 5),
+                Map.entry("여섯번째", 6), Map.entry("일곱번째", 7), Map.entry("여덟번째", 8), Map.entry("아홉번째", 9), Map.entry("열번째", 10),
+                Map.entry("첫째", 1), Map.entry("둘째", 2), Map.entry("셋째", 3), Map.entry("넷째", 4), Map.entry("다섯째", 5),
+                Map.entry("하나", 1), Map.entry("둘", 2), Map.entry("셋", 3), Map.entry("넷", 4), Map.entry("다섯", 5)
+        );
+        Integer number = ordinals.get(normalized);
+        if (number == null) {
+            java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("^(\\d+)(번|번째)?$").matcher(normalized);
+            if (matcher.matches()) {
+                number = Integer.parseInt(matcher.group(1));
+            }
+        }
+        if (number == null || number < 1 || number > size) {
+            return null;
+        }
+        return number - 1;
     }
 
     private VoiceCommandResponse createMemberSelectionResponse(List<Member> members, AiAnalysisResult aiResult, ConversationContextDTO existingContext) {

@@ -90,6 +90,28 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
+    void getVoiceHealthIsPublicWithoutToken() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/voice/health");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain, times(1)).doFilter(request, response);
+        verify(jwtUtil, never()).validateToken(anyString());
+    }
+
+    @Test
+    void postVoiceCommandStillRequiresToken() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/voice/command");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        verify(filterChain, never()).doFilter(request, response);
+    }
+
+    @Test
     void missingAuthorizationHeaderReturns401() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/members");
         MockHttpServletResponse response = new MockHttpServletResponse();
