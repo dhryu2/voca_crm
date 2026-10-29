@@ -80,7 +80,6 @@ flutter_*.png
 # Miscellaneous
 *.class
 *.log
-*.lock
 *.pyc
 *.swp
 .DS_Store
